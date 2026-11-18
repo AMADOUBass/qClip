@@ -1,0 +1,12 @@
+# Brief de campagne qClip (modèle). `qclip campaign new <slug>` copie ce fichier dans campaigns/<slug>.yaml.
+# Remplacer chaque valeur par celle du brief réel de la campagne (Content Rewards / Whop…).
+name: "Streamer X — clips GTA 6"
+creator: "StreamerX"
+platforms: [tiktok, shorts, reels]   # tiktok | shorts | reels
+rate_per_1k: 1.0                     # info, pour mes stats
+sources: ["https://www.twitch.tv/videos/123456789", "https://drive.google.com/..."]
+clip: { min_len: 15, max_len: 59 }   # secondes
+required: { mention: "@streamerx", hashtags: ["#streamerx", "#gta6"], caption_note: "" }
+forbidden: ["musique ajoutée", "contenu d'une autre campagne"]
+layout: facecam                      # facecam | blur | crop
+language: fr

@@ -1,0 +1,45 @@
+[project]
+name = "qclip"
+version = "0.1.0"
+description = "Clips verticaux sous-titrés en français à partir de VOD de campagnes de clipping, 100 % local."
+readme = "README.md"
+authors = [
+    { name = "Amadou Bassoum", email = "bassoumamadou0@gmail.com" }
+]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "psutil>=7.2.2",
+    "pydantic>=2.14.3",
+    "pyyaml>=6.0.3",
+    "rich>=15.0.0",
+    "typer>=0.29.1",
+]
+
+[project.scripts]
+qclip = "qclip.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+# Disposition « plate » : le package est dans qclip/ à la racine (pas de src/).
+[tool.uv.build-backend]
+module-name = "qclip"
+module-root = ""
+
+# torch viendra aux jalons suivants depuis PyPI (version CPU). Pas d'index CUDA : voir docs/SPEC.md §10.
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

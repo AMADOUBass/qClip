@@ -1,0 +1,32 @@
+# données vidéo et modèles
+input/*
+work/*
+output/*
+models/
+*.mp4
+*.mkv
+*.mov
+*.wav
+*.webm
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+
+# secrets et réglages perso
+.env
+.env.*
+CLAUDE.local.md
+.claude/settings.local.json
+
+# binaires externes (TwitchDownloaderCLI)
+tools/*
+
+# garder la structure des dossiers de données
+!input/.gitkeep
+!work/.gitkeep
+!output/.gitkeep
+!tools/.gitkeep

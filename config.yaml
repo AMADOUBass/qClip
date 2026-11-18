@@ -1,0 +1,15 @@
+# Config globale de qClip (validée par pydantic, voir qclip/config.py et docs/SPEC.md §6).
+device: auto                     # auto | cpu | cuda — ici ce sera cpu
+threads: auto                    # nb de cœurs physiques
+asr: { backend: parakeet, model: nemo-parakeet-tdt-0.6b-v3, quantization: int8 }
+separation: { enabled: true, model: "le plus rapide validé par bench-sep" }
+scout: { window_len: 75, windows_factor: 3, chat_delay: 5 }
+clips: { min_len: 15, max_len: 59, top_n: 8, preroll: 3.0 }
+weights: { chat: 2.0, loudness: 1.0, audio_events: 0.8, speech_energy: 1.0 }
+chat_emotes: ["KEKW", "LUL", "OMEGALUL", "LMAO", "💀", "W", "PogChamp", "Pog"]
+audio_event_labels: ["people laughing", "person screaming", "explosion", "gunshots", "police siren", "car crash"]
+keywords: ["oh", "nan", "wesh", "c'est pas possible", "tabarnak", "wallah"]
+features: { clap: true, scenes: true }
+llm: { use_llm: false, use_vision: false, text_model: "qwen3.5:4b", vision_model: "qwen3.5:4b" }
+render: { layout: facecam, fps: 30, encoder: auto, lufs: -14 }
+subtitle: { font: "Montserrat ExtraBold", size: 90, color: "#FFFFFF", highlight: "#FFD400", outline: 6, words_per_line: 3, uppercase: true }
