@@ -1,13 +1,47 @@
-# données vidéo et modèles
+# dossiers de données (VOD, plages, clips rendus, modèles)
 input/*
 work/*
 output/*
 models/
+
+# vidéos
 *.mp4
 *.mkv
 *.mov
-*.wav
 *.webm
+*.avi
+*.flv
+*.ts
+*.m3u8
+
+# audio
+*.wav
+*.m4a
+*.mp3
+*.aac
+*.flac
+*.ogg
+*.opus
+
+# images (miniatures, images extraites) — sauf les maquettes de docs/design/
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.gif
+!docs/design/**
+
+# sous-titres et données générées
+*.ass
+*.srt
+*.vtt
+*.npy
+*.npz
+*.parquet
+*.onnx
+*.part
+*.ytdl
+*.json.gz
 
 # Python
 .venv/
@@ -21,6 +55,7 @@ __pycache__/
 .env.*
 CLAUDE.local.md
 .claude/settings.local.json
+.claude
 
 # binaires externes (TwitchDownloaderCLI)
 tools/*

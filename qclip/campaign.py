@@ -46,6 +46,9 @@ class Brief(StrictModel):
     forbidden: list[str] = []
     layout: Literal["facecam", "blur", "crop"]
     language: str = Field(default="fr", pattern=r"^[a-z]{2}$")
+    # Campagne de test (VOD non autorisée par une vraie campagne) : traitement local permis,
+    # mais aucun clip « prêt à poster » ne doit en sortir (bloqué au rendu final / meta, M4-M5).
+    test_only: bool = False
 
     @field_validator("sources")
     @classmethod
@@ -62,6 +65,21 @@ def load_brief(path: Path) -> Brief:
         return Brief.model_validate(data)
     except ValidationError as e:
         raise ConfigError(format_validation_error(path.name, e)) from e
+
+
+def load_campaign(slug: str, campaigns_dir: Path = CAMPAIGNS_DIR) -> Brief:
+    path = campaigns_dir / f"{slug}.yaml"
+    if not path.exists():
+        raise ConfigError(f"campagne {slug!r} introuvable : crée-la avec `qclip campaign new {slug}`")
+    return load_brief(path)
+
+
+def check_source(brief: Brief, slug: str, url: str) -> None:
+    """Règle absolue : on ne traite qu'une URL listée dans le brief de la campagne."""
+    if url not in brief.sources:
+        raise ConfigError(
+            f"{url} n'est pas dans les sources de la campagne {slug!r} : ajoute-la dans campaigns/{slug}.yaml"
+        )
 
 
 def brief_paths(campaigns_dir: Path = CAMPAIGNS_DIR) -> list[Path]:

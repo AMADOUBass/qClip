@@ -142,8 +142,9 @@ def check_twitch_downloader() -> Check:
         if found is None:
             return Check("TwitchDownloaderCLI", "warn", "absent de tools/ — prévu au jalon M1")
         exe = found
-    version = ffmpeg.run([exe, "--version"], timeout=30).stdout.strip().splitlines()
-    return Check("TwitchDownloaderCLI", "ok", f"{version[0] if version else 'version ?'} ({exe})")
+    result = ffmpeg.run([exe, "--version"], timeout=30)
+    version = (result.stdout + result.stderr).strip().splitlines()  # la version sort sur stderr
+    return Check("TwitchDownloaderCLI", "ok", f"{version[0].split('+')[0] if version else 'version ?'} ({exe})")
 
 
 def find_ollama() -> Path | None:

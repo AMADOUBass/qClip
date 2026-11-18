@@ -206,3 +206,21 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     `%LOCALAPPDATA%\Programs\Ollama`, et son serveur est interrogé via `GET /api/tags`.
   - ffmpeg : build Gyan via winget (inclut libass et QSV/libvpl). Validé avec `Gyan.FFmpeg` 9.0.2 « full » (premier dans le PATH) :
     `h264_qsv` fonctionne sur l'UHD 620 (1 s de 1080x1920 encodée en 1,1 s), libass OK.
+- **M1, 2026-11-18**
+  - Campagne de test : champ de brief `test_only: true` (défaut `false`). Traitement local permis, mais le rendu final
+    et la meta (M4-M5) devront refuser de produire des clips « prêts à poster ». Exemple : `campaigns/test-fr.yaml`.
+  - Une URL n'est traitée que si elle figure dans `sources` du brief (`campaign.check_source`), y compris avec `--url`.
+    Les liens Drive / Dropbox sont ignorés par le scout (dépôt manuel).
+  - Médias : **yt-dlp pour tout** (audio du scout + plages vidéo), TwitchDownloaderCLI **seulement pour le chat**
+    (un seul chemin de code pour Twitch, YouTube, Kick). TwitchDownloaderCLI 1.56.5 dans `tools/` (SHA-256 vérifié).
+  - Identifiant de vidéo : `twitch-<id VOD>` (sans réseau), sinon `<extractor>-<id>` donné par yt-dlp.
+  - Scout : signaux à 1 s ; volume RMS (dBFS) calculé en flux par ffmpeg à 8 kHz (jamais toute la VOD en RAM) ;
+    chat = messages/s recalés de −`chat_delay` s, un message avec emote compte `1 + emote_bonus` (nouveau paramètre
+    `scout.emote_bonus`, défaut 1.0). Lissage (chat 5 s, volume 3 s), z-score glissant sur 10 min, somme pondérée
+    (`weights.chat`, `weights.loudness`), lissage 5 s. Sans chat : volume seul (le débit de parole par VAD viendra en M2).
+  - Fenêtres : glouton sur les pics, pic placé à 60 % de la fenêtre (contexte avant, réaction après), recouvrement ≤ 30 %,
+    `windows_factor × top_n` fenêtres (24 par défaut). L'exclusion des plages déjà clippées (`posts.csv`) attend M5.
+  - Fetch : nouvelle commande `qclip fetch <campagne> [--video] [--max-height] [--force]` (absente de §5).
+    Plages avec 5 s de marge, **sans réencodage** (`force_keyframes_at_cuts=False`, coupe au keyframe). Le vrai début
+    de chaque plage est retrouvé par corrélation croisée de son audio avec l'audio du scout (8 kHz, ± 10 s) →
+    `work/<id>/windows/windows.json` (`start` exact, `sync_quality`). Sous 0,5 d'accord, on garde le début demandé.

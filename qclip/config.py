@@ -51,6 +51,7 @@ class ScoutConfig(StrictModel):
     window_len: float = Field(gt=0)
     windows_factor: int = Field(ge=1)
     chat_delay: float = Field(ge=0)
+    emote_bonus: float = Field(ge=0)  # un message avec emote de rire / choc compte 1 + emote_bonus
 
 
 class WeightsConfig(StrictModel):
@@ -98,6 +99,7 @@ class Config(StrictModel):
     clips: ClipsConfig
     weights: WeightsConfig
     chat_emotes: list[str]
+    chat_bots: list[str]  # logins ignorés dans le chat (minuscules)
     audio_event_labels: list[str]
     keywords: list[str]
     features: FeaturesConfig

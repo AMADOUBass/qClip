@@ -1,0 +1,13 @@
+# Campagne de TEST : VOD publique choisie pour valider le pipeline, pas une campagne réelle.
+# test_only: true → traitement local seulement, aucun clip « prêt à poster » ne sortira de cette campagne.
+name: "TEST — NoahLunsi (VOD FR publique)"
+creator: "NoahLunsi"
+platforms: [tiktok, shorts, reels]
+rate_per_1k: 0
+sources: ["https://www.twitch.tv/videos/2930858181"]
+clip: { min_len: 15, max_len: 59 }
+required: { mention: "@noahlunsi", hashtags: [], caption_note: "" }
+forbidden: []
+layout: facecam
+language: fr
+test_only: true
