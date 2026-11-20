@@ -313,3 +313,27 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
   - `clip_<n>.words.tsv` mémorise le passage (`# passage <début> <fin>`, temps VOD) : il n'est réutilisé que pour le
     même passage. Si le candidat change (nouveaux réglages), il est régénéré et l'ancien gardé en `.tsv.old`
     (sinon les sous-titres seraient décalés — bug trouvé et corrigé pendant M4).
+- **M5, 2026-11-20**
+  - Après chaque rendu : `clip_<n>.json` (titre, accroche, hashtags, mention, miniature, source, conformité),
+    `clip_<n>.caption.txt` (prête à coller), `clip_<n>.jpg`, et une ligne dans `input/<campagne>/posts.csv`.
+    `qclip meta <campagne> [--ids]` refait tout ça sans réencoder la vidéo.
+  - **Sans LLM (défaut)** : accroche et titre = citation du clip, retenue seulement si l'ASR est sûr de ses mots
+    (confiance moyenne ≥ 0,75, aucun mot < 0,45), 2-8 mots (10 pour le titre), de préférence avec ? ou !, dite après
+    les 3 premières secondes pour l'accroche. Sinon gabarit tiré des signaux (« … en fou rire en live 😂 »), jamais
+    de promesse que les signaux ne justifient pas. Titre ≤ 60 caractères. Pas de citation fiable → pas d'accroche.
+  - Hashtags : ceux du brief d'abord, puis `#<créateur>` et des génériques FR, 5 à 8 au total.
+  - Conformité (`compliance`) : durée dans les bornes du brief, mention et hashtags exigés présents dans la légende,
+    titre ≤ 60, pas de musique ajoutée, campagne réelle. Le reste (contenu interdit, violence) → safety (M6).
+  - **Miniature propre** : image la plus nette (variance du laplacien, ± 3 s autour du pic) prise dans la **source**
+    et passée par le même layout, **sans sous-titres ni accroche** (le texte incrusté faussait la mesure et pouvait
+    afficher une faute d'ASR).
+  - Suivi `input/<campagne>/posts.csv` : une ligne par clip rendu, puis une par plateforme postée
+    (`qclip log <campagne> <clip> --platform tiktok --url … [--views N]`, vues à mettre à jour avec `--views` seul).
+    `qclip stats <campagne>` : rendus, posts, vues, gains ≈ vues / 1000 × `rate_per_1k`. Écriture atomique.
+  - **Anti-doublon** : les passages déjà postés (lignes avec URL) sont masqués au scout et écartés des candidats
+    (recouvrement > 30 %).
+  - **Campagne `test_only`** : légende préfixée « ⚠️ TEST — NE PAS POSTER », conformité en échec, `qclip log` refusé.
+  - Rerank LLM (optionnel, `qclip rerank`) : Ollama (`llm.text_model`), sortie JSON imposée par un schéma pydantic
+    (score 0-10, accroche ≤ 8 mots, titre ≤ 60, raison, `standalone`), top 2×N, résultats dans `work/<id>/rerank.json`
+    (clé = passage, survit à un recalcul des candidats), modèle déchargé à la fin (`keep_alive=0`). `qclip render`
+    prend alors les N meilleurs selon le LLM et ses accroches / titres.

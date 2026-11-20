@@ -13,6 +13,7 @@ import numpy as np
 from qclip.campaign import check_source, load_campaign
 from qclip.chat import ChatMessage, download_chat, is_noise, is_reaction, load_chat
 from qclip.config import Config, load_config
+from qclip.posts import posted_ranges
 from qclip.sources import WORK_DIR, download_audio, load_info, twitch_vod_id, video_id
 from qclip.steps import Steps
 from qclip.utils.audio import loudness_per_second
@@ -159,7 +160,9 @@ def scout_source(slug: str, url: str, steps: Steps, force: bool = False) -> dict
         )
         score, z_chat, z_loud = combined_score(chat, loudness, config)
         count = config.scout.windows_factor * config.clips.top_n
-        windows = pick_windows(score, config.scout.window_len, count)
+        for a, b in posted_ranges(slug, vid):  # passages déjà postés : jamais repris comme fenêtre
+            score[max(0, int(a)) : int(b) + 1] = -np.inf
+        windows = [w for w in pick_windows(score, config.scout.window_len, count) if np.isfinite(w.score)]
         for w in windows:
             w.chat_z, w.loudness_z = float(z_chat[int(w.peak)]), float(z_loud[int(w.peak)])
         np.savez_compressed(

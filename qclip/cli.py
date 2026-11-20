@@ -1,6 +1,7 @@
 """Interface en ligne de commande. Uniquement de l'affichage : la logique est dans les modules du cœur."""
 
 import io
+import json
 import sys
 import time
 from pathlib import Path
@@ -19,10 +20,14 @@ from qclip.candidates import build_candidates
 from qclip.config import ConfigError, cpu_threads, load_config
 from qclip.fetch import fetch_windows
 from qclip.ingest import ingest_windows
-from qclip.render import render_candidates
+from qclip.posts import campaign_stats, log_post
+from qclip.render import render_candidates, write_meta
+from qclip.rerank import key as rerank_key
+from qclip.rerank import load_rerank, rerank_candidates
 from qclip.scout import format_hms, load_scout, scout_source, scout_urls, scouted_videos
+from qclip.sources import WORK_DIR
 from qclip.steps import Steps
-from qclip.transcribe import transcribe_windows
+from qclip.transcribe import transcribe_windows, transcript_path
 
 # Erreurs « attendues » : on affiche le message, sans trace Python.
 USER_ERRORS = (ConfigError, RuntimeError, FileNotFoundError, DownloadError)
@@ -340,3 +345,83 @@ def render(
     except (*USER_ERRORS, ValueError) as e:
         raise fail(e) from e
     console.print(f"Total : {time.perf_counter() - start:.1f} s")
+
+
+@app.command()
+def rerank(
+    campaign: Annotated[str, typer.Argument(help="Slug de la campagne")],
+    video: Annotated[str | None, typer.Option(help="video_id (work/<video_id>/)")] = None,
+    top: Annotated[int | None, typer.Option(help="Nombre de candidats à noter (défaut : 2 × top_n)")] = None,
+    force: Annotated[bool, typer.Option(help="Renoter les candidats déjà notés")] = False,
+) -> None:
+    """(Optionnel) Un LLM local (Ollama) note les meilleurs candidats et propose accroche + titre."""
+    start = time.perf_counter()
+    try:
+        for vid in campaign_videos(campaign, video):
+            console.rule(vid)
+            path = rerank_candidates(campaign, vid, console_steps(), top, force)
+            console.print(f"✅ notes dans {path.relative_to(ROOT)} — `qclip render` les utilise")
+    except USER_ERRORS as e:
+        raise fail(e) from e
+    console.print(f"Total : {time.perf_counter() - start:.1f} s")
+
+
+@app.command()
+def meta(
+    campaign: Annotated[str, typer.Argument(help="Slug de la campagne")],
+    video: Annotated[str | None, typer.Option(help="video_id (work/<video_id>/)")] = None,
+    ids: Annotated[str | None, typer.Option(help="Clips, ex. 1,3 (défaut : tous les clips rendus)")] = None,
+) -> None:
+    """Refait titre, légende, miniature et conformité des clips déjà rendus (sans réencoder la vidéo)."""
+    try:
+        wanted = {int(x) for x in ids.split(",") if x.strip()} if ids else None
+        brief = load_campaign(campaign)
+        for vid in campaign_videos(campaign, video):
+            out_dir = WORK_DIR / vid / "renders" if brief.test_only else ROOT / "output" / campaign / vid
+            for render_json in sorted(out_dir.glob("clip_*.render.json")):
+                info = json.loads(render_json.read_text(encoding="utf-8"))
+                c = info["candidate"]
+                if wanted and c["id"] not in wanted:
+                    continue
+                words = json.loads(transcript_path(WORK_DIR / vid / "windows", c["window"]).read_text("utf-8"))
+                inside = [w for w in words["words"] if c["start"] <= w["start"] and w["end"] <= c["end"]]
+                llm = load_rerank(vid).get(rerank_key(c), {})
+                post = write_meta(campaign, vid, c, out_dir / f"clip_{c['id']}.mp4", inside, llm)
+                flag = "✅" if post["compliance"]["ok"] else "⚠️ "
+                console.print(f"{flag} clip {c['id']} — « {post['title']} »", soft_wrap=True)
+    except (*USER_ERRORS, ValueError) as e:
+        raise fail(e) from e
+
+
+@app.command()
+def log(
+    campaign: Annotated[str, typer.Argument(help="Slug de la campagne")],
+    clip: Annotated[str, typer.Argument(help="Numéro du clip (ex. 3) ou <video_id>/3")],
+    platform: Annotated[str, typer.Option(help="tiktok | shorts | reels")],
+    url: Annotated[str | None, typer.Option(help="URL du post")] = None,
+    views: Annotated[int | None, typer.Option(help="Nombre de vues (à mettre à jour quand tu veux)")] = None,
+) -> None:
+    """Enregistre un post (URL) et/ou ses vues dans input/<campagne>/posts.csv."""
+    try:
+        row = log_post(campaign, clip, platform, url, views)
+    except USER_ERRORS as e:
+        raise fail(e) from e
+    console.print(f"✅ clip {row['clip_id']} sur {row['platform']} : {row['post_url']} — {row['views'] or 0} vues")
+
+
+@app.command()
+def stats(campaign: Annotated[str, typer.Argument(help="Slug de la campagne")]) -> None:
+    """Clips rendus, postés, vues saisies et gains estimés (vues / 1000 × rate_per_1k du brief)."""
+    try:
+        s = campaign_stats(campaign)
+    except USER_ERRORS as e:
+        raise fail(e) from e
+    table = Table(title=f"Stats — {campaign}")
+    for column in ["Plateforme", "Posts", "Vues"]:
+        table.add_column(column, justify="right" if column != "Plateforme" else "left")
+    for platform, (n, v) in sorted(s.by_platform.items()):
+        table.add_row(platform, str(n), f"{v:,}".replace(",", " "))
+    console.print(table)
+    console.print(
+        f"{s.rendered} clip(s) rendu(s), {s.posted} post(s), {s.views:,} vues → ≈ {s.earnings:.2f} $".replace(",", " ")
+    )

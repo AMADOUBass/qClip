@@ -11,7 +11,10 @@ from typing import Any
 
 from qclip import ROOT
 from qclip.facecam import Facecam
-from qclip.subtitles import HEIGHT, HOOK_SECONDS, SAFE_BOTTOM, WIDTH, TimedWord, build_ass, save_ass
+from qclip.meta import make_hook
+from qclip.rerank import key as rerank_key
+from qclip.rerank import load_rerank, ordered
+from qclip.subtitles import HEIGHT, SAFE_BOTTOM, WIDTH, TimedWord, build_ass, save_ass
 from qclip.utils.ffmpeg import last_line, run, try_encode
 
 FONTS_DIR = ROOT / "assets" / "fonts"
@@ -112,26 +115,6 @@ def encoder_args(encoder: str) -> list[str]:
     return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"]
 
 
-def default_hook(words: list[dict[str, Any]], clip_start: float) -> str:
-    """Accroche provisoire (en attendant le LLM / les gabarits de M5) : une phrase courte et vive du clip,
-    prononcée APRÈS les 3 premières secondes (sinon l'accroche doublerait le sous-titre affiché au même moment)."""
-    sentences: list[tuple[float, str]] = []
-    current: list[str] = []
-    first = 0.0
-    for w in words:
-        if not current:
-            first = w["start"] - clip_start
-        current.append(w["text"])
-        if w["text"].rstrip().endswith((".", "?", "!", "…")):
-            sentences.append((first, " ".join(current)))
-            current = []
-    if current:
-        sentences.append((first, " ".join(current)))
-    later = [s for t, s in sentences if t >= HOOK_SECONDS and 2 <= len(s.split()) <= 8]
-    lively = [s for s in later if s.rstrip().endswith(("?", "!"))]
-    return (lively or later or [""])[0].rstrip(".…")
-
-
 def render_clip(
     candidate: dict[str, Any],
     work: Path,
@@ -230,8 +213,11 @@ def render_candidates(
     config, brief = load_config(), load_campaign(slug)
     work = WORK_DIR / vid
     data = json.loads((work / "candidates.json").read_text(encoding="utf-8"))
+    rerank = load_rerank(vid)
     limit = top or config.clips.top_n
-    chosen = [c for c in data["candidates"] if (c["id"] in ids if ids else c["id"] <= limit)]
+    # Sans --ids : les N meilleurs selon le LLM s'il y a un rerank, sinon selon le score des signaux.
+    by_id = [c for c in data["candidates"] if c["id"] in ids] if ids else []
+    chosen = by_id if ids else ordered(data["candidates"], rerank)[:limit]
     if ids and len(chosen) != len(ids):
         raise RuntimeError(f"candidats introuvables : {sorted(set(ids) - {c['id'] for c in chosen})}")
     if hook and len(chosen) != 1:
@@ -266,13 +252,75 @@ def render_candidates(
             steps.info(f"clip {c['id']} : {warning}")
         words = json.loads(transcript_path(work / "windows", c["window"]).read_text(encoding="utf-8"))["words"]
         inside = [w for w in words if c["start"] <= w["start"] and w["end"] <= c["end"]]
-        clip_hook = hook if hook is not None else c.get("hook") or default_hook(inside, c["start"])
+        llm = rerank.get(rerank_key(c), {})
+        clip_hook = hook if hook is not None else llm.get("hook") or make_hook(inside, c["start"], config.keywords)
         with steps.step(f"clip {c['id']} ({c['duration']:.0f} s, {layout.name}, {encoder})"):
             info = render_clip(c, work, out_path, layout, words, config.subtitle, config.render.lufs, encoder,
                                clip_hook, mention, brief.test_only)  # fmt: skip
         meta = {"candidate": c, "layout": layout.name, "facecam": asdict(facecam) if facecam else None,
-                "encoder": encoder, "hook": clip_hook, **info}  # fmt: skip
+                "encoder": encoder, "hook": clip_hook, "layout_filter": layout.filter, **info}  # fmt: skip
         out_path.with_suffix(".render.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), "utf-8")
-        steps.info(f"{out_path.relative_to(ROOT)} — accroche « {clip_hook} »")
-        results.append({"path": out_path, **meta})
+        with steps.step(f"meta clip {c['id']} (titre, légende, miniature)"):
+            post = write_meta(slug, vid, c, out_path, inside, llm)
+        steps.info(f"{out_path.relative_to(ROOT)} — accroche « {clip_hook} » — titre « {post['title']} »"
+                   + ("" if post["compliance"]["ok"] else " — ⚠️ brief non respecté"))  # fmt: skip
+        results.append({"path": out_path, **meta, "post": post})
     return results
+
+
+def write_meta(
+    slug: str, vid: str, c: dict[str, Any], clip: Path, words: list[dict[str, Any]], llm: dict[str, Any]
+) -> dict[str, Any]:
+    """clip_<n>.json + clip_<n>.caption.txt + clip_<n>.jpg à côté du clip, et sa ligne dans posts.csv."""
+    from qclip.campaign import load_campaign
+    from qclip.config import load_config
+    from qclip.meta import best_quote, compliance, make_caption, make_hashtags, make_title, sharpest_time
+    from qclip.posts import record_render
+    from qclip.sources import WORK_DIR
+    from qclip.utils.ffmpeg import media_duration
+
+    config, brief = load_config(), load_campaign(slug)
+    title = llm.get("title") or make_title(brief.creator, best_quote(words, c["start"], config.keywords, 10),
+                                           c["reasons"])  # fmt: skip
+    hashtags = make_hashtags(brief)
+    caption = make_caption(title, brief, hashtags)
+    duration = media_duration(clip)
+    render_info = json.loads(clip.with_suffix(".render.json").read_text(encoding="utf-8"))
+    # Miniature PROPRE : image de la source passée par le même layout, sans sous-titres ni accroche ;
+    # netteté mesurée sur la source (le texte incrusté fausserait la mesure).
+    if "layout_filter" not in render_info:
+        raise RuntimeError(f"{clip.name} a été rendu avant M5 : le refaire avec `qclip render --ids {c['id']} --force`")
+    source = WORK_DIR / vid / c["file"]
+    peak_file = c["file_start"] + (c["peak"] - c["start"])
+    t_file = sharpest_time(source, peak_file, c["file_start"] + duration)
+    t_file = min(max(t_file, c["file_start"] + 0.2), c["file_start"] + duration - 0.2)
+    thumb = clip.with_suffix(".jpg")
+    result = run(["ffmpeg", "-y", "-v", "error", "-ss", f"{t_file:.2f}", "-i", source,
+                  "-filter_complex", render_info["layout_filter"], "-map", "[v]", "-frames:v", "1", "-q:v", "2",
+                  thumb], timeout=60)  # fmt: skip
+    if result.returncode != 0:
+        raise RuntimeError(f"miniature impossible : {last_line(result.stderr)}")
+    thumb_t = t_file - c["file_start"]
+    post = {
+        "title": title,
+        "hook": render_info.get("hook", ""),
+        "hashtags": hashtags,
+        "mention": brief.required.mention,
+        "caption_file": clip.with_suffix(".caption.txt").name,
+        "thumbnail": thumb.name,
+        "thumbnail_time": round(thumb_t, 2),
+        "platforms": list(brief.platforms),
+        "duration": round(duration, 2),
+        "source": {"video_id": vid, "vod_start": c["start"], "vod_end": c["end"]},
+        "llm": llm or None,
+        "test_only": brief.test_only,
+        "compliance": compliance(brief, duration, caption, title),
+    }
+    clip.with_suffix(".caption.txt").write_text(caption, encoding="utf-8")
+    clip.with_suffix(".json").write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")
+    sources = json.loads((ROOT / "input" / slug / "sources.json").read_text(encoding="utf-8"))
+    url = next((s["url"] for s in sources if s["video_id"] == vid), "")
+    record_render(slug, {"video_id": vid, "clip_id": c["id"], "vod_start": c["start"], "vod_end": c["end"],
+                         "duration": round(duration, 2), "title": title, "clip_file": str(clip.relative_to(ROOT)),
+                         "source_url": url})  # fmt: skip
+    return post

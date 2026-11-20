@@ -9,7 +9,8 @@ import numpy as np
 from qclip.campaign import load_campaign
 from qclip.config import Config, cpu_threads, load_config
 from qclip.ingest import load_fetched, stem_paths
-from qclip.score import choose_segment, dedupe, pooled_z, smooth
+from qclip.posts import posted_ranges
+from qclip.score import choose_segment, dedupe, overlap_ratio, pooled_z, smooth
 from qclip.signals import STEP, ClapScorer, grid, scene_cuts, speech_features, voice_loudness
 from qclip.sources import WORK_DIR
 from qclip.steps import Steps
@@ -143,7 +144,7 @@ def build_candidates(
               zip(windows, per_window, strict=True)]  # fmt: skip
         events_z = pooled_z(ev)
 
-        candidates = []
+        candidates: list[dict[str, Any]] = []
         for k, (w, s) in enumerate(zip(windows, per_window, strict=True)):
             times = s["times"]
             chat_z = np.interp(times, np.arange(len(scout_chat_z)), scout_chat_z) if len(scout_chat_z) else 0 * times
@@ -187,7 +188,12 @@ def build_candidates(
                     "text": " ".join(x["text"] for x in inside),
                 }
             )
-        kept = dedupe(candidates)
+        # Anti-doublon : un passage déjà posté (posts.csv) n'est pas reproposé.
+        posted = posted_ranges(slug, vid)
+        fresh = [c for c in candidates if all(overlap_ratio((c["start"], c["end"]), r) <= 0.3 for r in posted)]
+        if len(fresh) < len(candidates):
+            steps.info(f"{len(candidates) - len(fresh)} candidat(s) écarté(s) : passage déjà posté")
+        kept = dedupe(fresh)
         for n, c in enumerate(kept, 1):
             c["id"] = n
     out = {

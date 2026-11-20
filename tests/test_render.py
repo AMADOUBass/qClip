@@ -4,7 +4,7 @@ import pytest
 
 from qclip.config import load_config
 from qclip.facecam import Facecam, classify, rect_around_face
-from qclip.render import choose_layout, default_hook, load_words_tsv, save_words_tsv
+from qclip.render import choose_layout, load_words_tsv, save_words_tsv
 from qclip.subtitles import SAFE_BOTTOM, TimedWord, build_ass, group_lines, override_color
 
 
@@ -35,16 +35,6 @@ def test_build_ass_highlights_each_word_in_turn() -> None:
     hook = next(e for e in subs if e.style == "Hook")
     assert (hook.start, hook.end) == (0, 3000) and "ACCROCHE" in hook.text
     assert SAFE_BOTTOM > 1400
-
-
-def test_default_hook_skips_first_seconds() -> None:
-    words = [
-        {"text": "T'es", "start": 100.1}, {"text": "chaud?", "start": 100.4},  # dit pendant l'accroche → ignoré
-        {"text": "Écoute", "start": 104.0}, {"text": "bien", "start": 104.3}, {"text": "ça.", "start": 104.6},
-        {"text": "C'est", "start": 106.0}, {"text": "fou!", "start": 106.3},
-    ]  # fmt: skip
-    assert default_hook(words, clip_start=100.0) == "C'est fou!"
-    assert default_hook(words[:2], clip_start=100.0) == ""
 
 
 def test_words_tsv_roundtrip_and_stale_detection(tmp_path: Path) -> None:
