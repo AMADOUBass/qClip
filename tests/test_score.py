@@ -116,3 +116,20 @@ def test_dedupe_keeps_best_of_overlapping() -> None:
     kept = dedupe(cands)
     assert [c["score"] for c in kept] == [2.0, 0.5]
     assert overlap_ratio((0, 30), (10, 40)) == pytest.approx(20 / 30)
+
+
+def test_segment_grows_toward_target_with_whole_sentences() -> None:
+    words = make_words(SENTENCES * 2)  # ~65 s de parole
+    times = np.arange(98.0, words[-1]["end"] + 3, STEP)
+    reaction = [w for w in words if w["text"] == "Wesh"][0]["start"]
+    bounds = (98.0, float(times[-1]))
+    short = choose_segment(times, peak_score(times, reaction), words, [], 15, 59, 3.0, bounds)
+    seg = choose_segment(times, peak_score(times, reaction), words, [], 15, 59, 3.0, bounds, target_len=30)
+    assert seg.duration > short.duration
+    assert 27 <= seg.duration <= 59
+    assert seg.peak - seg.start <= 15 + 1  # le pic reste dans la première moitié de la cible
+    ends = {w["end"] for w in words}
+    assert any(abs(seg.end - (e + 0.15)) < 1e-6 for e in ends)  # toujours en fin de mot
+    first = min((w for w in words if w["start"] >= seg.start), key=lambda w: w["start"])
+    i = words.index(first)
+    assert i == 0 or words[i - 1]["text"].endswith((".", "?", "!"))  # toujours en début de phrase

@@ -13,9 +13,10 @@ import numpy as np
 SENTENCE_END = (".", "?", "!", "…")
 PAUSE = 0.6  # un silence d'au moins 0,6 s entre deux mots compte comme une frontière de phrase
 CUT_SNAP = 1.0  # une coupe de scène à moins d'1 s d'une borne devient la borne
-END_AFTER_DROP = 2.5  # secondes gardées après la retombée de l'excitation
+END_AFTER_DROP = 5.0  # secondes gardées après la retombée de l'excitation (borne haute de la spec : 2 à 5 s)
 DROP_RATIO = 0.35  # « retombée » : le score lissé passe sous 35 % de la hauteur du pic
 WORD_PAD = 0.15  # marge avant le premier mot / après le dernier
+TARGET_TOLERANCE = 3.0  # on s'arrête à 3 s de la durée cible
 
 
 @dataclass
@@ -79,8 +80,10 @@ def choose_segment(
     max_len: float,
     preroll: float,
     bounds: tuple[float, float],
+    target_len: float | None = None,
 ) -> Segment:
-    """Meilleur passage de la plage : autour du pic de `score`, calé sur les phrases, dans [min_len, max_len]."""
+    """Meilleur passage de la plage : autour du pic de `score`, calé sur les phrases, dans [min_len, max_len],
+    rallongé phrase par phrase vers `target_len` s'il est donné."""
     lo, hi = bounds
     i_peak = int(np.argmax(score))
     peak = float(times[i_peak])
@@ -111,6 +114,21 @@ def choose_segment(
                 s_idx = before[-1]
             else:
                 break
+        # Durée cible : on ajoute des phrases entières, avant ou après, celle qui rapproche le plus de la cible.
+        # Avant seulement si le pic reste dans la première moitié du clip (le moment fort doit arriver vite).
+        if target_len:
+            while words[e_idx]["end"] - words[s_idx]["start"] < target_len - TARGET_TOLERANCE:
+                options = []
+                before = [i for i in starts if i < s_idx]
+                after = [e for e in ends if e > e_idx]
+                if before and peak - words[before[-1]]["start"] <= target_len / 2:
+                    options.append((before[-1], e_idx))
+                if after:
+                    options.append((s_idx, after[0]))
+                options = [o for o in options if words[o[1]]["end"] - words[o[0]]["start"] <= max_len]
+                if not options:
+                    break
+                s_idx, e_idx = min(options, key=lambda o: abs(words[o[1]]["end"] - words[o[0]]["start"] - target_len))
         # Trop long : on retire des phrases au début (sans dépasser le pic), puis on coupe la fin à une fin de mot.
         while words[e_idx]["end"] - words[s_idx]["start"] > max_len:
             later = [s for s in starts if s_idx < s and words[s]["start"] <= peak - 1]

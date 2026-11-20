@@ -216,6 +216,19 @@ def check_briefs() -> list[Check]:
     return checks
 
 
+def check_render_assets() -> Check:
+    from qclip.facecam import YUNET, YUNET_URL
+    from qclip.render import FONTS_DIR
+
+    font = FONTS_DIR / "Montserrat-ExtraBold.ttf"
+    if not font.exists():
+        return Check("Rendu (police, YuNet)", "fail", f"police absente : {font}", "git checkout -- assets/fonts")
+    if not YUNET.exists():
+        return Check("Rendu (police, YuNet)", "warn", "modèle YuNet absent (détection facecam)",
+                     f'curl -L -o "{YUNET}" {YUNET_URL}')  # fmt: skip
+    return Check("Rendu (police, YuNet)", "ok", "Montserrat ExtraBold + YuNet 2026may présents")
+
+
 CHECKS: list[Callable[[], Check | list[Check]]] = [
     check_python,
     check_uv,
@@ -230,6 +243,7 @@ CHECKS: list[Callable[[], Check | list[Check]]] = [
     check_ollama,
     check_disk,
     check_sample,
+    check_render_assets,
     check_config,
     check_briefs,
 ]

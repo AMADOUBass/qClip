@@ -279,3 +279,37 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
   - Sur la VOD de test : 24 candidats en 7 min 20 (coupes ≈ 5 min, CLAP ≈ 2 min), aucun mot coupé, 24/24 en début
     de phrase, durées 16-22 s avec preroll 3 s. **Preroll passé à 8 s** (demande) : 16-24 s, médiane 19 s ; le début
     était déjà ramené au début de phrase, c'est la fin (retombée + 2,5 s) qui limite la longueur.
+  - Fin des clips : 5 s gardées après la retombée (au lieu de 2,5 s) → 15-28 s, médiane 20 s. Pour des clips de
+    30 s et plus, il faudra une durée cible (non fait).
+- **M4, 2026-11-19**
+  - `qclip render <campagne> [--ids 1,3] [--top N] [--layout] [--hook] [--force]`. Un clip = une passe de mesure
+    loudnorm + un seul passage ffmpeg (layout + sous-titres + audio). Encodage `h264_qsv` (`-global_quality 23`),
+    repli libx264 si le test d'encodage QSV échoue. ≈ 12 s de calcul par clip de 20 s sur ce PC.
+  - **Facecam détectée par clip, pas par VOD** : le streamer change de scène (caméra plein cadre, partage d'écran,
+    match avec webcam incrustée). YuNet `2026may` (entrée dynamique, requis par OpenCV 5.1), pleine résolution,
+    3 images par clip. Règles (validées sur 8 vrais clips) : visage ≥ 10 % de la largeur → `fullcam` ; sinon visage
+    de 24-200 px, stable sur ≥ 2 images, **dans un coin** (25 % ext. en x ET 30 % ext. en y), bonus s'il bouge →
+    webcam incrustée ; sinon grand visage vu une fois → `fullcam`. YuNet trouve aussi les visages du contenu
+    (arbitre, vidéo) et du décor (posters) : d'où le coin et le mouvement. Zone webcam ≈ 7 × la largeur du visage.
+    Champ de brief optionnel `facecam: [x, y, w, h]` pour forcer la zone.
+  - Layout `facecam` sur une caméra plein cadre (ou sans webcam) → **repli sur `blur`** avec un message. `crop` → M6.
+  - Géométrie 1080x1920 : facecam = webcam 1080x640 en haut + bande centrale du jeu 1080x1280 en bas ;
+    blur = fond flouté (calculé en 270x480 puis agrandi) + image 1080x608 au centre. Zone interdite : y > 1536
+    (20 % du bas) et 150 px à droite. Sous-titres : sous l'image (blur, y ≈ 1400) ou dans le jeu (facecam, y ≈ 1237).
+  - Sous-titres ASS (pysubs2) : un événement par mot, mot prononcé en `highlight`, 3 mots par ligne max, coupure
+    en fin de phrase, après une virgule (si ≥ 2 mots) ou sur une pause ≥ 0,6 s ; ligne tenue 0,4 s après son dernier mot.
+    Police **Montserrat ExtraBold** fournie dans `assets/fonts/` (licence OFL) via `fontsdir`.
+  - `clip_<n>.words.tsv` à côté de chaque clip : **corriger le texte à la main puis relancer `render --force`**
+    (le fichier existant est réutilisé) → correctif des fautes de transcription en attendant l'éditeur (M8).
+  - Accroche provisoire (en attendant M5) : première phrase courte (2-8 mots), de préférence avec ? ou !, dite après
+    les 3 premières secondes. Souvent mauvaise (reprend les fautes d'ASR) → `--hook` pour l'imposer.
+  - Mention du brief (`required.mention`) affichée en bas à gauche, au-dessus de la zone interdite.
+  - **Campagne `test_only`** : rendus dans `work/<id>/renders/` (pas `output/`) avec le bandeau « TEST — NE PAS POSTER ».
+  - Audio : loudnorm 2 passes, −14 LUFS, TP −1,5 dB, AAC 192 kb/s 48 kHz. Mesuré sur 8 clips : −13,8 à −15,0 LUFS.
+  - **Durée cible** `clips.target_len: 30` (demande) : après le choix du passage, on ajoute des phrases entières
+    (avant ou après, celle qui rapproche le plus de la cible), avant seulement si le pic reste dans la 1re moitié de la
+    cible ; arrêt à 3 s de la cible, jamais au-delà de `max_len` du brief. Top 8 de la VOD de test : 27-32 s, pic
+    9-13 s après le début.
+  - `clip_<n>.words.tsv` mémorise le passage (`# passage <début> <fin>`, temps VOD) : il n'est réutilisé que pour le
+    même passage. Si le candidat change (nouveaux réglages), il est régénéré et l'ancien gardé en `.tsv.old`
+    (sinon les sous-titres seraient décalés — bug trouvé et corrigé pendant M4).

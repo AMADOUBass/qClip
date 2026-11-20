@@ -156,9 +156,12 @@ def build_candidates(
             )
             score = smooth(combined, SCORE_SMOOTH)
             words = json.loads(transcript_path(windows_dir, w["rank"]).read_text(encoding="utf-8"))["words"]
+            target = config.clips.target_len
+            if target is not None:
+                target = min(max(target, brief.clip.min_len), brief.clip.max_len)
             seg = choose_segment(
                 times, score, words, [float(c) for c in s["cuts"]], brief.clip.min_len, brief.clip.max_len,
-                config.clips.preroll, (w["start"], w["start"] + w["duration"]),
+                config.clips.preroll, (w["start"], w["start"] + w["duration"]), target,
             )  # fmt: skip
             i_peak = int(np.argmin(np.abs(times - seg.peak)))
             parts = {"loud_z": loud_z[k], "events_z": events_z[k], "rate_z": rate_z[k],

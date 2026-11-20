@@ -19,6 +19,7 @@ from qclip.candidates import build_candidates
 from qclip.config import ConfigError, cpu_threads, load_config
 from qclip.fetch import fetch_windows
 from qclip.ingest import ingest_windows
+from qclip.render import render_candidates
 from qclip.scout import format_hms, load_scout, scout_source, scout_urls, scouted_videos
 from qclip.steps import Steps
 from qclip.transcribe import transcribe_windows
@@ -314,5 +315,28 @@ def candidates(
                 )  # fmt: skip
             console.print(table)
     except USER_ERRORS as e:
+        raise fail(e) from e
+    console.print(f"Total : {time.perf_counter() - start:.1f} s")
+
+
+@app.command()
+def render(
+    campaign: Annotated[str, typer.Argument(help="Slug de la campagne")],
+    video: Annotated[str | None, typer.Option(help="video_id (work/<video_id>/)")] = None,
+    ids: Annotated[str | None, typer.Option(help="Candidats à rendre, ex. 1,3,5 (défaut : les top_n premiers)")] = None,
+    top: Annotated[int | None, typer.Option(help="Rendre les N meilleurs candidats")] = None,
+    layout: Annotated[str | None, typer.Option(help="facecam | blur (défaut : le brief)")] = None,
+    hook: Annotated[str | None, typer.Option(help="Accroche imposée (avec un seul --ids)")] = None,
+    force: Annotated[bool, typer.Option(help="Refaire les clips déjà rendus")] = False,
+) -> None:
+    """Rend les candidats en clips verticaux 1080x1920 : layout, sous-titres mot par mot, accroche, loudnorm."""
+    start = time.perf_counter()
+    try:
+        wanted = [int(x) for x in ids.split(",") if x.strip()] if ids else None
+        for vid in campaign_videos(campaign, video):
+            console.rule(vid)
+            done = render_candidates(campaign, vid, wanted, top, console_steps(), layout, hook, force)
+            console.print(f"✅ {len(done)} clip(s) rendu(s)")
+    except (*USER_ERRORS, ValueError) as e:
         raise fail(e) from e
     console.print(f"Total : {time.perf_counter() - start:.1f} s")

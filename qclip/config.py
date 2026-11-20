@@ -34,6 +34,7 @@ class ClipBounds(StrictModel):
 class ClipsConfig(ClipBounds):
     top_n: int = Field(ge=1)
     preroll: float = Field(ge=0)
+    target_len: float | None = Field(default=None, gt=0)  # durée visée ; bornée par min_len / max_len du brief
 
 
 class AsrConfig(StrictModel):

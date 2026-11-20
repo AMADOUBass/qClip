@@ -49,6 +49,15 @@ class Brief(StrictModel):
     # Campagne de test (VOD non autorisée par une vraie campagne) : traitement local permis,
     # mais aucun clip « prêt à poster » ne doit en sortir (bloqué au rendu final / meta, M4-M5).
     test_only: bool = False
+    # Zone webcam fixée à la main [x, y, largeur, hauteur] en pixels de la source (sinon détectée par YuNet).
+    facecam: list[int] | None = None
+
+    @field_validator("facecam")
+    @classmethod
+    def check_facecam(cls, value: list[int] | None) -> list[int] | None:
+        if value is not None and (len(value) != 4 or value[2] <= 0 or value[3] <= 0 or min(value[:2]) < 0):
+            raise ValueError("facecam attend [x, y, largeur, hauteur] en pixels, ex. [1500, 40, 380, 280]")
+        return value
 
     @field_validator("sources")
     @classmethod
