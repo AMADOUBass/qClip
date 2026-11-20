@@ -23,7 +23,7 @@ from qclip.config import ConfigError
 from qclip.edits import correct_everywhere, load_edits, save_edit, word_key
 from qclip.jobs import JobQueue
 from qclip.posts import log_post
-from qclip.sources import WORK_DIR
+from qclip.sources import WORK_DIR, twitch_vod_id
 
 MEDIA_ROOTS = [ROOT / "work", ROOT / "output", ASSETS_DIR]
 VID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -211,7 +211,9 @@ def create_app(queue: JobQueue | None = None) -> FastAPI:
             data = brief.model_dump(mode="json")
             data["sources"] = [*brief.sources, body.url]
             save_brief(slug, data)
-        job = jobs.submit("process", f"Analyse de {body.url}", slug, lambda steps: process_vod(slug, body.url, steps))
+        vod = twitch_vod_id(body.url)  # connu sans réseau pour Twitch : l'écran VOD peut s'ouvrir tout de suite
+        job = jobs.submit("process", f"Analyse de {body.url}", slug, lambda steps: process_vod(slug, body.url, steps),
+                          video_id=f"twitch-{vod}" if vod else None)  # fmt: skip
         return {"job": job.to_dict(), "source_rule": brief.source_rule}
 
     @app.put("/api/vods/{vid}/moments/{window}")

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Unbounded } from "next/font/google";
+import { Suspense } from "react";
 
 import { Providers } from "@/components/providers";
 import { Sidebar } from "@/components/sidebar";
@@ -20,9 +21,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr" className={`${inter.variable} ${unbounded.variable} ${jetbrains.variable} antialiased`}>
       <body className="min-h-screen">
         <Providers>
+          {/* Suspense : la barre latérale et les pages lisent l'URL (usePathname, useParams…) ; Next 16 veut ces
+              lectures sous un Suspense pour pouvoir pré-rendre le reste. */}
           <div className="flex min-h-screen">
-            <Sidebar />
-            <main className="min-w-0 flex-1 px-10 py-8">{children}</main>
+            <Suspense fallback={<aside className="w-[104px] shrink-0 border-r border-line bg-surface" />}>
+              <Sidebar />
+            </Suspense>
+            <main className="min-w-0 flex-1 px-10 py-8">
+              <Suspense fallback={<div className="card-qc h-96 animate-pulse" />}>{children}</Suspense>
+            </main>
           </div>
         </Providers>
       </body>

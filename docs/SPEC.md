@@ -387,3 +387,20 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
   - Next 16 (`cacheComponents`) : pas de `new Date()` au rendu d'un composant client → `useNow()`
     (`useSyncExternalStore`). `agentRules: false` (pas d'AGENTS.md), indicateur de dev en bas à droite.
   - Tests e2e `web/e2e/` (API + front lancés) : chaque écran s'affiche sans erreur console, palette Ctrl K.
+- **M8 — étape 3 (accueil, campagnes, brief, états), 2026-11-20**
+  - **Accueil** (maquette 1) : cartes chiffrées (gains 7 j + courbe, vues vérifiées, moments à trier, prêts à poster),
+    carte « En cours sur ta machine » (étapes de la tâche, radar du chat de la VOD, temps restant, RAM), campagnes
+    actives, derniers clips (vignette propre + statut). La barre de budget n'apparaît que si le brief a un budget.
+  - **Campagnes + brief** (maquette 2) : un seul formulaire pour créer (`/campaigns/new`) et modifier
+    (`/campaigns/<slug>`), React Hook Form + Zod (`web/lib/brief-schema.ts`), erreurs en rouge sous chaque champ.
+    Écrit `campaigns/<slug>.yaml` via l'API (slug tiré du nom). Overlay PNG/WebP envoyé dans
+    `campaigns/assets/<slug>/` et placé en le glissant sur l'aperçu 9:16 (x, y, largeur en fraction de l'image).
+    Checklist « avant de poster » calculée en direct depuis le brief.
+  - **Ajouts hors maquette** (nécessaires au rendu) : champs « Créateur » (nom dans les titres) et « Mention
+    obligatoire ». « Recadrage » est grisé « Disponible en M6 ».
+  - **États** (maquette 7) : aucune campagne → lien « Trouver une campagne » vers https://whop.com/discover/ ;
+    tâche en erreur → carte avec « Réessayer » et la commande de mise à jour de yt-dlp à copier ; API arrêtée →
+    commande `uv run qclip serve`. « Importer un fichier » grisé (pas encore prévu).
+  - Next 16 : `usePathname`/`useParams` sous un `<Suspense>` (posé dans le layout).
+  - Tests e2e ajoutés (`web/e2e/brief.spec.ts`, rien n'est écrit) : erreurs du brief, hashtag vide ignoré,
+    glisser l'overlay. La création complète d'une campagne a été vérifiée à la main puis le fichier de test supprimé.

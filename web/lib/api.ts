@@ -102,6 +102,44 @@ export type PipelineItem = {
   test_only: boolean;
 };
 
+/** Brief de campagne tel que renvoyé par l'API (mêmes champs que qclip/campaign.py). */
+export type Brief = {
+  name: string;
+  creator: string;
+  platforms: ("tiktok" | "shorts" | "reels")[];
+  rate_per_1k: number;
+  sources: string[];
+  clip: { min_len: number; max_len: number };
+  required: { mention: string; hashtags: string[]; caption_note: string };
+  forbidden: string[];
+  layout: "facecam" | "blur" | "crop";
+  language: string;
+  test_only: boolean;
+  facecam: number[] | null;
+  brief_url: string;
+  source_platform: "kick" | "twitch" | "youtube" | null;
+  channel: string;
+  source_rule: string;
+  budget_total: number | null;
+  payout_min: number | null;
+  payout_max: number | null;
+  overlay: { file: string; x: number; y: number; width: number; url?: string | null } | null;
+  requirements: {
+    link_in_bio: string;
+    dedicated_account: boolean;
+    linked_description: boolean;
+    submit_within_min: number | null;
+  };
+  audience: { country: string; min_country_pct: number | null; min_engagement_pct: number | null };
+};
+
+export type BriefView = {
+  slug: string;
+  brief: Brief;
+  checklist: { label: string; detail: string }[];
+  summary?: CampaignSummary;
+};
+
 export type Dashboard = {
   date: string;
   paid_7d: number;
