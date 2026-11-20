@@ -370,3 +370,20 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     (`jobs.py`, **une à la fois**, étape / « N/total » / temps restant / journal), état en direct sur `/api/events` (SSE).
   - Score affiché dans l'interface = score des signaux ramené sur 10 (meilleur moment = 10) ; la note du LLM, si
     elle existe, est affichée à part (le 2B n'est pas fiable).
+- **M8 — étape 2 (squelette du front), 2026-11-20**
+  - `web/` : Next.js 16.4 (App Router, Turbopack, `cacheComponents`), React 19.3, TypeScript strict, Tailwind 4.3,
+    shadcn 4 (Radix, préréglage « nova », icônes lucide), TanStack Query 5, Zustand 5, Motion 14, sonner,
+    React Hook Form + Zod, Playwright + Vitest. pnpm.
+  - **Charte des maquettes** dans `web/app/globals.css` (variables CSS + `@theme inline`) : fond crème `#f2f0eb`,
+    cartes `#faf9f6`, jaune `#ffd60a` (action, sélection), bleu `#3b4bf5` (chat, progression), olive `#8a6d00`
+    (montants), rose `#d61f4f` (rejet), orange `#e8860c` (alertes), arrondis 28 px. Clair uniquement.
+    **Polices (approximation, pas de notes de style fournies)** : Unbounded (titres larges), Inter (texte),
+    JetBrains Mono (étiquettes en capitales). À remplacer si les polices exactes de Claude Design sont connues.
+  - Données : client `web/lib/api.ts` (API `NEXT_PUBLIC_QCLIP_API`, défaut http://127.0.0.1:8765), état des tâches
+    en direct par **EventSource** sur `/api/events` → cache TanStack `["jobs"]` ; une tâche terminée fait recharger
+    les écrans. Pastille de tâche dans l'en-tête (étape, « N/total », temps restant).
+  - Palette **Ctrl K** (maquette 8) + raccourcis globaux : Ctrl N nouvelle VOD, T trier, Ctrl R rendre les gardés,
+    Ctrl ⇧ C copier la dernière légende (pas quand on tape dans un champ).
+  - Next 16 (`cacheComponents`) : pas de `new Date()` au rendu d'un composant client → `useNow()`
+    (`useSyncExternalStore`). `agentRules: false` (pas d'AGENTS.md), indicateur de dev en bas à droite.
+  - Tests e2e `web/e2e/` (API + front lancés) : chaque écran s'affiche sans erreur console, palette Ctrl K.

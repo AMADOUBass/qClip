@@ -1,0 +1,121 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Charte qClip — reprise des maquettes Claude Design (docs/design/). Interface claire uniquement. */
+
+@theme inline {
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains);
+  --font-display: var(--font-unbounded);
+
+  /* Couleurs de la charte (utilisables en classes : bg-yellow, text-blue, bg-pink-soft…) */
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-yellow: var(--yellow);
+  --color-yellow-soft: var(--yellow-soft);
+  --color-olive: var(--olive);
+  --color-blue: var(--blue);
+  --color-blue-soft: var(--blue-soft);
+  --color-pink: var(--pink);
+  --color-pink-soft: var(--pink-soft);
+  --color-orange: var(--orange);
+  --color-orange-soft: var(--orange-soft);
+  --color-line: var(--line);
+
+  /* Variables attendues par les composants shadcn */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --radius: 0.875rem;
+
+  --page: #f2f0eb; /* fond de page crème */
+  --surface: #faf9f6; /* cartes */
+  --ink: #15161c; /* texte, boutons sombres */
+  --yellow: #ffd60a; /* action principale, sélection */
+  --yellow-soft: #fbf3cf;
+  --olive: #8a6d00; /* montants, scores sur fond clair */
+  --blue: #3b4bf5; /* chat, progression, liens */
+  --blue-soft: #e7e9fd;
+  --pink: #d61f4f; /* rejeter, non conforme */
+  --pink-soft: #fbe6ec;
+  --orange: #e8860c; /* alertes */
+  --orange-soft: #fdf1e1;
+  --line: #e5e2db;
+
+  --background: var(--page);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--yellow);
+  --primary-foreground: var(--ink);
+  --secondary: #ebe8e1;
+  --secondary-foreground: var(--ink);
+  --muted: #ebe8e1;
+  --muted-foreground: #6b6a66;
+  --accent: var(--yellow-soft);
+  --accent-foreground: var(--ink);
+  --destructive: var(--pink);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--blue);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background font-sans text-foreground;
+  }
+}
+
+@layer components {
+  /* Titres larges et gras des maquettes (« Bonsoir Abba. », « Miami Nights #3 ») */
+  .title-xl {
+    @apply font-display text-[2.6rem] leading-none font-extrabold tracking-[-0.03em];
+  }
+  .title-lg {
+    @apply font-display text-[1.6rem] leading-tight font-bold tracking-[-0.02em];
+  }
+  /* Étiquettes en capitales mono (« GAINS · 7 JOURS », « CAMPAGNES / NOUVEAU BRIEF ») */
+  .eyebrow {
+    @apply font-mono text-[0.78rem] tracking-[0.14em] text-muted-foreground uppercase;
+  }
+  .card-qc {
+    @apply rounded-[1.75rem] border border-line bg-surface;
+  }
+  /* Raccourci clavier (« Ctrl K », « A ») */
+  .kbd {
+    @apply inline-flex items-center rounded-md bg-secondary px-1.5 py-0.5 font-mono text-[0.72rem] text-muted-foreground;
+  }
+}
