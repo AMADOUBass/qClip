@@ -2,7 +2,7 @@
 device: auto                     # auto | cpu | cuda — ici ce sera cpu
 threads: auto                    # nb de cœurs physiques
 asr: { backend: parakeet, model: nemo-parakeet-tdt-0.6b-v3, quantization: int8 }
-separation: { enabled: true, model: "le plus rapide validé par bench-sep" }
+separation: { enabled: false, model: "UVR-MDX-NET-Voc_FT.onnx" }   # bench-sep 2026-11-19 : RTF 2,1-5 sur ce CPU, sans gain ; activer pour les VOD très bruitées
 scout: { window_len: 75, windows_factor: 3, chat_delay: 5, emote_bonus: 1.0 }
 clips: { min_len: 15, max_len: 59, top_n: 8, preroll: 3.0 }
 weights: { chat: 2.0, loudness: 1.0, audio_events: 0.8, speech_energy: 1.0 }

@@ -3,6 +3,7 @@
 import io
 import sys
 import time
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -12,11 +13,15 @@ from yt_dlp.utils import DownloadError
 
 from qclip import ROOT
 from qclip import doctor as doctor_mod
-from qclip.campaign import load_brief, new_campaign
-from qclip.config import ConfigError
+from qclip.asr import BACKENDS  # noqa: F401  (aide de --backend)
+from qclip.bench import SEP_MODELS, AsrResult, bench_asr, bench_sep
+from qclip.campaign import load_brief, load_campaign, new_campaign
+from qclip.config import ConfigError, cpu_threads, load_config
 from qclip.fetch import fetch_windows
+from qclip.ingest import ingest_windows
 from qclip.scout import format_hms, load_scout, scout_source, scout_urls, scouted_videos
 from qclip.steps import Steps
+from qclip.transcribe import transcribe_windows
 
 # Erreurs « attendues » : on affiche le message, sans trace Python.
 USER_ERRORS = (ConfigError, RuntimeError, FileNotFoundError, DownloadError)
@@ -159,3 +164,123 @@ def fetch(
     except USER_ERRORS as e:
         raise fail(e) from e
     console.print(f"Total : {time.perf_counter() - start:.1f} s")
+
+
+def campaign_videos(campaign: str, video: str | None) -> list[str]:
+    """VOD repérées pour cette campagne. Un --video d'une autre campagne est refusé."""
+    videos = scouted_videos(campaign)
+    if video:
+        if video not in videos:
+            raise ConfigError(f"{video} n'appartient pas à la campagne {campaign!r} (repérées : {', '.join(videos)})")
+        return [video]
+    if not videos:
+        raise ConfigError(f"aucune VOD repérée pour {campaign!r} : lancer d'abord `qclip scout {campaign}`")
+    return videos
+
+
+@app.command()
+def ingest(
+    campaign: Annotated[str, typer.Argument(help="Slug de la campagne")],
+    video: Annotated[str | None, typer.Option(help="video_id (work/<video_id>/)")] = None,
+    top: Annotated[int | None, typer.Option(help="Seulement les N meilleures plages")] = None,
+    separation: Annotated[bool, typer.Option(help="Séparer la voix (désactiver pour un podcast propre)")] = True,
+    force: Annotated[bool, typer.Option(help="Refaire les plages déjà prêtes")] = False,
+) -> None:
+    """Audio de chaque plage → voix (mono 16 kHz) + reste (mono 48 kHz), séparation par audio-separator."""
+    start = time.perf_counter()
+    try:
+        config = load_config()
+        load_campaign(campaign)
+        for vid in campaign_videos(campaign, video):
+            console.rule(vid)
+            ready = ingest_windows(
+                vid, console_steps(), separation and config.separation.enabled, config.separation.model, top, force
+            )
+            console.print(f"✅ {len(ready)} plages prêtes dans work/{vid}/windows/")
+    except USER_ERRORS as e:
+        raise fail(e) from e
+    console.print(f"Total : {time.perf_counter() - start:.1f} s")
+
+
+@app.command()
+def transcribe(
+    campaign: Annotated[str, typer.Argument(help="Slug de la campagne")],
+    video: Annotated[str | None, typer.Option(help="video_id (work/<video_id>/)")] = None,
+    top: Annotated[int | None, typer.Option(help="Seulement les N meilleures plages")] = None,
+    backend: Annotated[str | None, typer.Option(help="parakeet | whisper | qwen3 (défaut : config.yaml)")] = None,
+    force: Annotated[bool, typer.Option(help="Retranscrire les plages déjà faites")] = False,
+) -> None:
+    """Transcrit la voix de chaque plage → w_<n>.transcript.json (mots horodatés, temps de la VOD)."""
+    start = time.perf_counter()
+    try:
+        config = load_config()
+        brief = load_campaign(campaign)
+        chosen = backend or config.asr.backend
+        for vid in campaign_videos(campaign, video):
+            console.rule(vid)
+            done = transcribe_windows(
+                vid,
+                console_steps(),
+                backend=chosen,
+                model=config.asr.model if chosen == config.asr.backend else None,
+                quantization=config.asr.quantization,
+                language=brief.language,
+                threads=cpu_threads(config),
+                prompt=brief.creator,
+                top=top,
+                force=force,
+            )
+            console.print(f"✅ {len(done)} transcriptions dans work/{vid}/windows/")
+    except USER_ERRORS as e:
+        raise fail(e) from e
+    console.print(f"Total : {time.perf_counter() - start:.1f} s")
+
+
+def bench_table(title: str, results: list[AsrResult], first_label: str) -> Table:
+    table = Table(title=title)
+    for column in ["", "Modèle", "Chargement", "Calcul", "RTF", "Mots", "Confiance", f"Écart / {first_label}"]:
+        table.add_column(column, justify="right" if column not in ("", "Modèle") else "left")
+    for r in results:
+        table.add_row(
+            r.name,
+            r.model,
+            f"{r.load_s:.1f} s",
+            f"{r.run_s:.1f} s",
+            f"{r.rtf:.2f}" if r.run_s else "—",
+            str(r.words),
+            f"{r.confidence:.2f}" if r.confidence is not None else "—",
+            f"{r.wer_vs_first:.0%}" if r.wer_vs_first is not None else "réf.",
+        )
+    return table
+
+
+@app.command("bench-asr")
+def bench_asr_cmd(
+    audio: Annotated[Path, typer.Argument(help="Extrait d'une campagne (ex. work/<id>/windows/w_01.vocals.wav)")],
+    backends: Annotated[str, typer.Option(help="Liste séparée par des virgules")] = "parakeet,whisper,qwen3",
+) -> None:
+    """Compare les backends de transcription : temps de chargement, de calcul, RTF, confiance, écart entre eux."""
+    try:
+        names = [b.strip() for b in backends.split(",") if b.strip()]
+        results = bench_asr(audio, names, console_steps(), threads=cpu_threads(load_config()))
+    except USER_ERRORS as e:
+        raise fail(e) from e
+    console.print(bench_table(f"bench-asr — {audio.name}", results, results[0].name))
+    for r in results:
+        console.print(f"\n[bold]{r.name}[/] : {r.text}", soft_wrap=True)
+
+
+@app.command("bench-sep")
+def bench_sep_cmd(
+    audio: Annotated[Path, typer.Argument(help="Extrait d'une campagne (ex. work/<id>/windows/w_01.mp4)")],
+    models: Annotated[str, typer.Option(help="Modèles audio-separator (virgules)")] = ",".join(SEP_MODELS),
+) -> None:
+    """Compare les modèles de séparation : temps, puis qualité de la transcription Parakeet de la voix obtenue."""
+    try:
+        names = [m.strip() for m in models.split(",") if m.strip()]
+        results = bench_sep(audio, names, console_steps(), threads=cpu_threads(load_config()))
+    except USER_ERRORS as e:
+        raise fail(e) from e
+    console.print(bench_table(f"bench-sep — {audio.name}", results, "audio brut"))
+    for r in results:
+        console.print(f"\n[bold]{r.name}[/] : {r.text}", soft_wrap=True)

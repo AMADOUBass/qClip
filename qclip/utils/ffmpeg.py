@@ -128,3 +128,14 @@ def try_subtitles(ffmpeg_exe: Path | str = "ffmpeg") -> tuple[bool, str]:
             cwd=Path(tmp),
         )  # fmt: skip
     return result.returncode == 0, "" if result.returncode == 0 else last_line(result.stderr)
+
+
+def media_duration(path: Path, ffprobe_exe: Path | str = "ffprobe") -> float:
+    """Durée en secondes d'un fichier audio ou vidéo."""
+    result = run(
+        [ffprobe_exe, "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", path], timeout=60
+    )
+    try:
+        return float(result.stdout.strip())
+    except ValueError as e:
+        raise RuntimeError(f"durée illisible pour {path.name} : {last_line(result.stderr)}") from e

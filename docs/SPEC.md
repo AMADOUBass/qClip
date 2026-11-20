@@ -165,11 +165,23 @@ subtitle: { font: "Montserrat ExtraBold", size: 90, color: "#FFFFFF", highlight:
 ## 7. Interface de revue (M8)
 - **Design** : maquettes faites dans Claude Design, exportées dans `docs/design/`. Les suivre fidèlement ; demander si un écran manque.
 - **Backend** : FastAPI local (`qclip serve`, `localhost` uniquement), qui appelle le même cœur Python que la CLI. Tâches longues en arrière-plan, progression par SSE.
-- **Frontend** : Next.js (App Router) + TypeScript + Tailwind, dans `web/`. Vidéo servie par l'API (requêtes Range).
-- **Écrans** : 1) Campagnes + stats ; 2) VOD : ajout d'URL et progression (scout → fetch → transcription → candidats) ;
-  3) Revue des candidats : timeline avec pics, liste avec aperçu, cocher et ajuster début/fin ;
-  4) Éditeur de clip : aperçu 9:16, correction des sous-titres, layout, style, accroche, relancer le rendu ;
-  5) Prêt à poster : clips, verdict safety, légende copiable, miniature, saisie de l'URL du post.
+- **Frontend** (dans `web/`, vérifier chaque lib avec Context7 avant usage) :
+  - Next.js 16 (App Router, Turbopack) + React 19 + TypeScript strict
+  - Tailwind CSS v4 (config dans le CSS via `@theme`) + shadcn/ui (composants copiés, accessibles) + lucide-react (icônes)
+  - Motion (ex-Framer Motion) pour les animations et transitions ; sonner pour les notifications
+  - TanStack Query (données de l'API, progression) + Zustand (état local de l'éditeur)
+  - React Hook Form + Zod (formulaire de brief, mêmes règles que le pydantic côté Python)
+  - **Remotion Player** pour l'aperçu 9:16 **en direct** dans l'éditeur (sous-titres, overlay, layout, accroche
+    rendus dans le navigateur sans attendre ffmpeg) ; le rendu final reste fait par ffmpeg côté Python.
+    Licence gratuite pour un individu (à revérifier si l'équipe dépasse 3 personnes).
+  - wavesurfer.js (+ plugin Regions) pour la timeline audio et les poignées début/fin
+  - Vidéo servie par l'API (requêtes Range). Tests : Vitest + Playwright.
+- **UX** : clavier d'abord (J/K pour naviguer, Espace pour lire, A garder, X rejeter, Ctrl+K palette de commandes),
+  animations courtes et utiles, aucune attente sans indicateur de progression ni temps estimé.
+- **Écrans** (le détail visuel vient des maquettes) : 1) Tableau de bord + campagnes ; 2) Brief de campagne ;
+  3) VOD : « radar » de la VOD entière et progression repérage → traitement ;
+  4) Tri des moments (clavier, aperçu instantané) ; 5) Éditeur de clip avec aperçu Remotion en direct ;
+  6) Pipeline des clips (À revoir → Rendu → Posté → Payé) avec légende copiable, checklist du brief et saisie des URLs.
 - ✔ = parcours complet (URL → clips postés et logués) sans terminal.
 
 ## 8. Jalons (un par un ; montrer le résultat avant de passer au suivant)
@@ -224,3 +236,22 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     Plages avec 5 s de marge, **sans réencodage** (`force_keyframes_at_cuts=False`, coupe au keyframe). Le vrai début
     de chaque plage est retrouvé par corrélation croisée de son audio avec l'audio du scout (8 kHz, ± 10 s) →
     `work/<id>/windows/windows.json` (`start` exact, `sync_quality`). Sous 0,5 d'accord, on garde le début demandé.
+- **M2, 2026-11-19** (bench sur un extrait de 30 s d'un stream Just Chatting FR, i7-8550U, 4 cœurs)
+  - Nouvelles commandes : `qclip ingest <campagne> [--top] [--separation/--no-separation]`,
+    `qclip transcribe <campagne> [--top] [--backend]`, `qclip bench-asr <audio> [--backends]`, `qclip bench-sep <audio> [--models]`.
+  - **ASR retenu : Parakeet TDT 0.6B v3 int8 (onnx-asr) + Silero VAD**, segments ≤ 20 s. RTF 0,24-0,32, chargement 4-7 s,
+    ponctuation, confiance par mot (exp de la moyenne des logprobs). Mots = tokens regroupés (espace initiale = nouveau mot),
+    fin d'un mot bornée (dernier token + 0,4 s, et début du mot suivant).
+    - Whisper small int8 (faster-whisper) : RTF 0,46, moins juste (« comme nous » au lieu de « au camp de nous »), invente
+      des phrases sur l'audio confus. Reçoit l'audio en tableau numpy : faster-whisper 1.2.1 est incompatible avec PyAV 19.
+    - Qwen3-ASR-0.6B + ForcedAligner (extra optionnel `uv sync --extra qwen`, float32) : texte de bonne qualité mais
+      RTF 6,4 + 38 s de chargement → inutilisable sur ce CPU. ASR puis aligneur chargés l'un après l'autre (jamais ensemble).
+      L'extra fait descendre `huggingface-hub` en 0.36 pour tout le projet (sans effet constaté sur onnx-asr).
+  - **Séparation de la voix désactivée par défaut** (`separation.enabled: false`) : RTF 2,1 (UVR-MDX-NET-Voc_FT),
+    2,8 (Kim_Vocal_2), 5,0 (MelBand RoFormer), sans gain mesurable sur la transcription de cet extrait
+    (confiance Parakeet 0,84 sur l'audio brut). Si activée : `UVR-MDX-NET-Voc_FT.onnx`. **À rebencher sur une VOD GTA**
+    (musique / bruits de jeu), où elle peut devenir utile. Modèles dans `models/audio-separator/`.
+    `audioread` ajouté à la main : audio-separator 0.48 l'importe sans le déclarer (librosa 1.0 ne le tire plus).
+  - Sans séparation, `other.wav` = l'audio complet (mono 48 kHz) : c'est ce que CLAP écoutera en M3.
+  - Transcriptions : `work/<id>/windows/w_<n>.transcript.json`, mots en **temps de la VOD** + `window_start`
+    (temps dans le fichier de la plage = `start - window_start`). Le prompt (nom du créateur) ne sert qu'à Whisper.

@@ -142,3 +142,12 @@ def load_config(path: Path = CONFIG_PATH) -> Config:
         return Config.model_validate(data)
     except ValidationError as e:
         raise ConfigError(format_validation_error(path.name, e)) from e
+
+
+def cpu_threads(config: Config) -> int:
+    """`threads: auto` → nombre de cœurs physiques (les cœurs logiques n'aident pas l'inférence ONNX / CTranslate2)."""
+    if config.threads != "auto":
+        return int(config.threads)
+    import psutil
+
+    return psutil.cpu_count(logical=False) or 4
