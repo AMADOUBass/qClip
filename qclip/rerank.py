@@ -6,7 +6,6 @@ textes courts. Le modèle est déchargé à la fin (keep_alive=0) pour rendre la
 
 import contextlib
 import json
-import re
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +13,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from qclip.campaign import load_campaign
 from qclip.config import load_config
+from qclip.meta import is_clean
 from qclip.sources import WORK_DIR
 from qclip.steps import Steps
 
@@ -54,21 +54,17 @@ def key(c: dict[str, Any]) -> str:
 
 
 def load_rerank(vid: str) -> dict[str, dict[str, Any]]:
+    """Notes du LLM ; le filtre de gros mots s'applique aussi à la lecture (fichiers écrits avant le filtre)."""
     path = WORK_DIR / vid / "rerank.json"
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    data: dict[str, dict[str, Any]] = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    for verdict in data.values():
+        for field in ("hook", "title"):
+            if not is_clean(verdict.get(field, "")):
+                verdict[field] = ""
+    return data
 
 
-# Gros mots : une accroche ou un titre qui en contient est ignoré (retour au gabarit). Les petits modèles en
-# reprennent volontiers depuis la transcription.
-PROFANITY = re.compile(
-    r"\b(encul\w*|put(e|ain)\w*|connard\w*|connasse|salop\w*|batard\w*|bâtard\w*|nique\w*|ntm|fdp|merde\w*"
-    r"|couilles?|bite|chatte|pd|tg|ta gueule)\b",
-    re.IGNORECASE,
-)
-
-
-def is_clean(text: str) -> bool:
-    return not PROFANITY.search(text)
+# Gros mots : une accroche ou un titre du LLM qui en contient est ignoré (retour au gabarit) → meta.is_clean.
 
 
 def clean(verdict: Verdict) -> dict[str, Any]:

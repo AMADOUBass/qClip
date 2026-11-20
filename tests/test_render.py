@@ -4,7 +4,7 @@ import pytest
 
 from qclip.config import load_config
 from qclip.facecam import Facecam, classify, rect_around_face
-from qclip.render import choose_layout, load_words_tsv, save_words_tsv
+from qclip.render import choose_layout, save_words_tsv
 from qclip.subtitles import SAFE_BOTTOM, TimedWord, build_ass, group_lines, override_color
 
 
@@ -37,17 +37,12 @@ def test_build_ass_highlights_each_word_in_turn() -> None:
     assert SAFE_BOTTOM > 1400
 
 
-def test_words_tsv_roundtrip_and_stale_detection(tmp_path: Path) -> None:
+def test_words_tsv_is_generated_output(tmp_path: Path) -> None:
     path = tmp_path / "clip_1.words.tsv"
-    span = (7659.0, 7687.0)
-    save_words_tsv([tw("salut", 0.15), tw("toi.", 0.5)], path, span)
-    text = path.read_text(encoding="utf-8").replace("toi.", "toi !")  # correction à la main
-    path.write_text(text, encoding="utf-8")
-    words = load_words_tsv(path, span)
-    assert words is not None and [w.text for w in words] == ["salut", "toi !"]
-    assert words[0].start == pytest.approx(0.15) and words[1].end == pytest.approx(0.8)
-    # le candidat a changé de début (nouveaux réglages) : les temps du fichier ne valent plus rien
-    assert load_words_tsv(path, (7655.0, 7687.0)) is None
+    save_words_tsv([tw("salut", 0.15), tw("toi.", 0.5)], path, (7659.0, 7687.0))
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert lines[0].startswith("# passage 7659.000 7687.000") and "GÉNÉRÉ" in lines[1]
+    assert lines[2:] == ["0.150\t0.450\tsalut", "0.500\t0.800\ttoi."]
 
 
 def test_facecam_classification_on_real_detections() -> None:

@@ -1553,6 +1553,7 @@ source = { editable = "." }
 dependencies = [
     { name = "audio-separator", extra = ["cpu"] },
     { name = "audioread" },
+    { name = "fastapi" },
     { name = "faster-whisper" },
     { name = "numpy" },
     { name = "ollama" },
@@ -1561,10 +1562,12 @@ dependencies = [
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pysubs2" },
+    { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "rich" },
     { name = "transformers" },
     { name = "typer" },
+    { name = "uvicorn" },
     { name = "yt-dlp", extra = ["default"] },
 ]
 
@@ -1582,6 +1585,7 @@ dev = [
 requires-dist = [
     { name = "audio-separator", extras = ["cpu"], specifier = ">=0.48.0" },
     { name = "audioread", specifier = ">=3.1.0" },
+    { name = "fastapi", specifier = ">=0.165.0" },
     { name = "faster-whisper", specifier = ">=1.2.1" },
     { name = "numpy", specifier = ">=2.5.5" },
     { name = "ollama", specifier = ">=0.6.3" },
@@ -1590,11 +1594,13 @@ requires-dist = [
     { name = "psutil", specifier = ">=7.2.2" },
     { name = "pydantic", specifier = ">=2.14.3" },
     { name = "pysubs2", specifier = ">=1.9.1" },
+    { name = "python-multipart", specifier = ">=0.0.34" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "qwen-asr", marker = "extra == 'qwen'", specifier = ">=0.0.6" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "transformers", specifier = ">=4.57.6" },
     { name = "typer", specifier = ">=0.29.1" },
+    { name = "uvicorn", specifier = ">=0.54.0" },
     { name = "yt-dlp", extras = ["default"], specifier = ">=2026.10.26" },
 ]
 provides-extras = ["qwen"]

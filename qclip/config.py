@@ -89,6 +89,7 @@ class SubtitleConfig(StrictModel):
     outline: float = Field(ge=0)
     words_per_line: int = Field(ge=1, le=6)
     uppercase: bool
+    style: Literal["neon", "box", "outline", "karaoke"] = "neon"  # mot prononcé : couleur / bloc / contour / karaoké
 
 
 class Config(StrictModel):

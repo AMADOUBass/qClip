@@ -23,6 +23,18 @@ WORD_MIN_CONF = 0.45
 TEST_BANNER = "⚠️ TEST — NE PAS POSTER (campagne de test, contenu non autorisé)"
 
 
+# Gros mots : jamais dans une accroche ni un titre (gabarit ou LLM). Les sous-titres, eux, restent fidèles à la parole.
+PROFANITY = re.compile(
+    r"\b(encul\w*|put(e|ain)\w*|connard\w*|connasse|salop\w*|batard\w*|bâtard\w*|nique\w*|ntm|fdp|merde\w*"
+    r"|couilles?|bite|chatte|pd|tg|ta gueule)\b",
+    re.IGNORECASE,
+)
+
+
+def is_clean(text: str) -> bool:
+    return not PROFANITY.search(text)
+
+
 @dataclass
 class Sentence:
     text: str
@@ -65,7 +77,7 @@ def best_quote(
     for s in split_sentences(words, clip_start):
         if s.start < after or not 2 <= s.words <= max_words:
             continue
-        if s.mean_conf < QUOTE_MIN_CONF or s.min_conf < WORD_MIN_CONF:
+        if s.mean_conf < QUOTE_MIN_CONF or s.min_conf < WORD_MIN_CONF or not is_clean(s.text):
             continue
         score = s.mean_conf + (1.0 if s.text.endswith(("?", "!")) else 0.0)
         score += 0.5 if any(normalize(t) in targets for t in s.text.split()) else 0.0
@@ -131,9 +143,11 @@ def make_caption(title: str, brief: Brief, hashtags: list[str]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def compliance(brief: Brief, duration: float, caption: str, title: str) -> dict[str, Any]:
+def compliance(brief: Brief, duration: float, caption: str, title: str, overlay_done: bool = False) -> dict[str, Any]:
     """Vérifications du brief faisables sans regarder la vidéo (le reste : safety, M6)."""
     checks = [
+        ("overlay", brief.overlay is None or overlay_done,
+         "aucun exigé" if brief.overlay is None else ("incrusté" if overlay_done else "absent du rendu")),
         ("durée", brief.clip.min_len <= duration <= brief.clip.max_len,
          f"{duration:.1f} s (brief : {brief.clip.min_len:g}-{brief.clip.max_len:g} s)"),
         ("mention", not brief.required.mention or brief.required.mention in caption, brief.required.mention or "—"),

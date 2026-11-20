@@ -35,6 +35,30 @@ class Required(StrictModel):
         return values
 
 
+class Overlay(StrictModel):
+    """Image imposée par la campagne (ex. logo KICK), incrustée sur tous les clips. Position : fraction de 1080x1920."""
+
+    file: str = Field(min_length=1)  # nom du fichier dans campaigns/assets/<slug>/
+    x: float = Field(default=0.72, ge=0, le=1)  # coin haut-gauche
+    y: float = Field(default=0.30, ge=0, le=1)
+    width: float = Field(default=0.18, gt=0, le=1)  # largeur en fraction de 1080
+
+
+class Requirements(StrictModel):
+    """Obligations du brief à cocher avant de poster (checklist)."""
+
+    link_in_bio: str = ""  # ex. « Risor Tracker » ; vide = pas exigé
+    dedicated_account: bool = False
+    linked_description: bool = False
+    submit_within_min: int | None = Field(default=None, ge=1)  # soumettre le lien sur la plateforme de campagne
+
+
+class Audience(StrictModel):
+    country: str = ""
+    min_country_pct: float | None = Field(default=None, ge=0, le=100)
+    min_engagement_pct: float | None = Field(default=None, ge=0, le=100)
+
+
 class Brief(StrictModel):
     name: str = Field(min_length=1)
     creator: str = Field(min_length=1)
@@ -51,6 +75,17 @@ class Brief(StrictModel):
     test_only: bool = False
     # Zone webcam fixée à la main [x, y, largeur, hauteur] en pixels de la source (sinon détectée par YuNet).
     facecam: list[int] | None = None
+    # Champs de l'écran « Brief de campagne » (M8), tous optionnels.
+    brief_url: str = ""
+    source_platform: Literal["kick", "twitch", "youtube"] | None = None
+    channel: str = ""
+    source_rule: str = ""  # rappelée à chaque VOD ajoutée
+    budget_total: float | None = Field(default=None, ge=0)
+    payout_min: float | None = Field(default=None, ge=0)  # sous ce gain estimé, un clip n'est pas payé
+    payout_max: float | None = Field(default=None, ge=0)  # plafond par clip
+    overlay: Overlay | None = None
+    requirements: Requirements = Requirements()
+    audience: Audience = Audience()
 
     @field_validator("facecam")
     @classmethod
@@ -110,3 +145,35 @@ def new_campaign(slug: str, campaigns_dir: Path = CAMPAIGNS_DIR) -> Path:
     load_brief(template)  # on ne copie jamais un modèle cassé
     target.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
     return target
+
+
+ASSETS_DIR = CAMPAIGNS_DIR / "assets"
+
+
+def brief_path(slug: str, campaigns_dir: Path = CAMPAIGNS_DIR) -> Path:
+    if not SLUG_RE.match(slug):
+        raise ConfigError(f"slug invalide {slug!r}")
+    return campaigns_dir / f"{slug}.yaml"
+
+
+def save_brief(slug: str, data: dict, campaigns_dir: Path = CAMPAIGNS_DIR, create: bool = False) -> Brief:
+    """Valide puis écrit campaigns/<slug>.yaml (utilisé par l'interface). Les commentaires du YAML sont perdus."""
+    import yaml
+
+    path = brief_path(slug, campaigns_dir)
+    if create and path.exists():
+        raise ConfigError(f"la campagne {slug!r} existe déjà")
+    if not create and not path.exists():
+        raise ConfigError(f"campagne {slug!r} introuvable")
+    try:
+        brief = Brief.model_validate(data)
+    except ValidationError as e:
+        raise ConfigError(format_validation_error(path.name, e)) from e
+    dumped = brief.model_dump(mode="json", exclude_defaults=True)
+    dumped = {"name": brief.name, "creator": brief.creator, **dumped}  # champs obligatoires toujours en tête
+    path.write_text(yaml.safe_dump(dumped, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return brief
+
+
+def campaign_slugs(campaigns_dir: Path = CAMPAIGNS_DIR) -> list[str]:
+    return sorted(p.stem for p in campaigns_dir.glob("*.yaml") if not p.name.startswith("_"))

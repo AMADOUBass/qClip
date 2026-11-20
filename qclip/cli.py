@@ -20,6 +20,7 @@ from qclip.candidates import build_candidates
 from qclip.config import ConfigError, cpu_threads, load_config
 from qclip.fetch import fetch_windows
 from qclip.ingest import ingest_windows
+from qclip.pipeline import process_vod
 from qclip.posts import campaign_stats, log_post
 from qclip.render import render_candidates, write_meta
 from qclip.rerank import key as rerank_key
@@ -333,6 +334,7 @@ def render(
     layout: Annotated[str | None, typer.Option(help="facecam | blur (défaut : le brief)")] = None,
     hook: Annotated[str | None, typer.Option(help="Accroche imposée (avec un seul --ids)")] = None,
     force: Annotated[bool, typer.Option(help="Refaire les clips déjà rendus")] = False,
+    kept: Annotated[bool, typer.Option(help="Rendre les moments gardés au tri (interface)")] = False,
 ) -> None:
     """Rend les candidats en clips verticaux 1080x1920 : layout, sous-titres mot par mot, accroche, loudnorm."""
     start = time.perf_counter()
@@ -340,7 +342,7 @@ def render(
         wanted = [int(x) for x in ids.split(",") if x.strip()] if ids else None
         for vid in campaign_videos(campaign, video):
             console.rule(vid)
-            done = render_candidates(campaign, vid, wanted, top, console_steps(), layout, hook, force)
+            done = render_candidates(campaign, vid, wanted, top, console_steps(), layout, hook, force, kept)
             console.print(f"✅ {len(done)} clip(s) rendu(s)")
     except (*USER_ERRORS, ValueError) as e:
         raise fail(e) from e
@@ -400,10 +402,11 @@ def log(
     platform: Annotated[str, typer.Option(help="tiktok | shorts | reels")],
     url: Annotated[str | None, typer.Option(help="URL du post")] = None,
     views: Annotated[int | None, typer.Option(help="Nombre de vues (à mettre à jour quand tu veux)")] = None,
+    paid: Annotated[float | None, typer.Option(help="Montant payé pour ce post ($)")] = None,
 ) -> None:
-    """Enregistre un post (URL) et/ou ses vues dans input/<campagne>/posts.csv."""
+    """Enregistre un post (URL), ses vues et/ou ce qui a été payé dans input/<campagne>/posts.csv."""
     try:
-        row = log_post(campaign, clip, platform, url, views)
+        row = log_post(campaign, clip, platform, url, views, paid)
     except USER_ERRORS as e:
         raise fail(e) from e
     console.print(f"✅ clip {row['clip_id']} sur {row['platform']} : {row['post_url']} — {row['views'] or 0} vues")
@@ -422,6 +425,36 @@ def stats(campaign: Annotated[str, typer.Argument(help="Slug de la campagne")]) 
     for platform, (n, v) in sorted(s.by_platform.items()):
         table.add_row(platform, str(n), f"{v:,}".replace(",", " "))
     console.print(table)
-    console.print(
-        f"{s.rendered} clip(s) rendu(s), {s.posted} post(s), {s.views:,} vues → ≈ {s.earnings:.2f} $".replace(",", " ")
-    )
+    views = f"{s.views:,}".replace(",", " ")
+    console.print(f"{s.rendered} clip(s) rendu(s), {s.posted} post(s), {views} vues → ≈ {s.earnings:.2f} $ estimés")
+    budget = f" · budget restant {s.budget_left:.2f} $ / {s.budget_total:.2f} $" if s.budget_total is not None else ""
+    console.print(f"Payé : {s.paid:.2f} ${budget}")
+
+
+@app.command()
+def process(
+    campaign: Annotated[str, typer.Argument(help="Slug de la campagne")],
+    url: Annotated[str | None, typer.Option(help="Une seule source (elle doit être dans le brief)")] = None,
+    force: Annotated[bool, typer.Option(help="Tout refaire (téléchargements compris)")] = False,
+) -> None:
+    """Chaîne complète d'une VOD : repérage → plages → audio → transcription → candidats."""
+    start = time.perf_counter()
+    try:
+        for source in scout_urls(campaign, url):
+            console.rule(source)
+            vid = process_vod(campaign, source, console_steps(), force)
+            console.print(f"✅ {vid} prête : `qclip candidates {campaign} --video {vid}` puis `qclip render`")
+    except USER_ERRORS as e:
+        raise fail(e) from e
+    console.print(f"Total : {time.perf_counter() - start:.1f} s")
+
+
+@app.command()
+def serve(
+    port: Annotated[int, typer.Option(help="Port local de l'API")] = 8765,
+) -> None:
+    """Lance l'API locale de l'interface (http://127.0.0.1:8765, jamais exposée sur le réseau)."""
+    from qclip.server import serve as run_server
+
+    console.print(f"API qClip sur http://127.0.0.1:{port}  (docs : /docs) — Ctrl+C pour arrêter")
+    run_server(port=port)

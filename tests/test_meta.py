@@ -119,3 +119,20 @@ def test_llm_profanity_falls_back_to_templates() -> None:
     assert ok["hook"] == "Ce que j'ai vu au camp" and ok["title"] == "NoahLunsi : Réaction au camp"
     assert clean(Verdict(score=5, hook="Il est putain de fort", title="t", reason="x", standalone=True))["hook"] == ""
     assert clean(Verdict(score=5, hook="Computer power", title="t", reason="x", standalone=True))["hook"] != ""
+
+
+def test_estimate_respects_brief_min_and_max() -> None:
+    assert posts.estimate(20000, 1.5, None, None) == 30.0
+    assert posts.estimate(2000, 1.5, 5.0, None) == 0.0  # 3 $ < minimum de 5 $ → non payé
+    assert posts.estimate(100000, 1.5, 5.0, 75.0) == 75.0  # plafonné
+
+
+def test_paid_and_budget(campaign: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(posts, "load_campaign", lambda slug: brief(rate_per_1k=1.5, budget_total=100.0, payout_min=5.0))
+    posts.log_post(campaign, "3", "tiktok", "https://www.tiktok.com/@moi/video/1", 20000)
+    posts.log_post(campaign, "3", "tiktok", None, None, paid=28.5)
+    s = posts.campaign_stats(campaign)
+    assert s.earnings == pytest.approx(30.0) and s.paid == pytest.approx(28.5)
+    assert s.budget_left == pytest.approx(71.5)
+    with pytest.raises(ConfigError, match="négatif"):
+        posts.log_post(campaign, "3", "tiktok", None, None, paid=-1)

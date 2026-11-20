@@ -60,9 +60,9 @@ def ingest_windows(
         with steps.step(f"chargement du modèle de séparation {model}"):
             separator = VocalSeparator(model)
     try:
-        for w, vocals, other in todo:
+        for i, (w, vocals, other) in enumerate(todo, 1):
             video = windows_dir / w["file"]
-            with steps.step(f"plage {w['rank']:02d} ({w['duration']:.0f} s)"):
+            with steps.step(f"plage {i}/{len(todo)} (n°{w['rank']:02d}, {w['duration']:.0f} s)"):
                 if separator is None:
                     to_wav(video, vocals, 16000)
                     to_wav(video, other, 48000)

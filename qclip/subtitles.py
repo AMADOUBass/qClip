@@ -69,6 +69,7 @@ def build_ass(
     hook_y: int = 420,
     mention: str = "",
     watermark: str = "",
+    variant: str | None = None,
 ) -> pysubs2.SSAFile:
     subs = pysubs2.SSAFile()
     subs.info["PlayResX"] = str(WIDTH)
@@ -92,27 +93,36 @@ def build_ass(
     )  # fmt: skip
 
     highlight = override_color(style.highlight)
+    preset = variant or style.style
     lines = group_lines(words, style.words_per_line)
+    if preset == "karaoke":
+        # Remplissage progressif (\kf) : la couleur « remplie » est le highlight, la couleur d'attente le blanc.
+        subs.styles["Karaoke"] = subs.styles["Words"].copy()
+        subs.styles["Karaoke"].primarycolor = ass_color(style.highlight)
+        subs.styles["Karaoke"].secondarycolor = white
     for n, line in enumerate(lines):
         next_start = lines[n + 1][0].start if n + 1 < len(lines) else clip_duration
         line_end = min(line[-1].end + HOLD, next_start, clip_duration)
+        texts = [escape(w.text.upper() if style.uppercase else w.text) for w in line]
+        position = rf"{{\pos({WIDTH // 2},{center_y})}}"
+        if preset == "karaoke":
+            parts = []
+            for i, (word, text) in enumerate(zip(line, texts, strict=True)):
+                until = line[i + 1].start if i + 1 < len(line) else word.end
+                parts.append(rf"{{\kf{max(1, round((until - word.start) * 100))}}}{text}")
+            subs.append(pysubs2.SSAEvent(start=round(line[0].start * 1000), end=round(line_end * 1000),
+                                         style="Karaoke", text=position + " ".join(parts)))  # fmt: skip
+            continue
         for i, word in enumerate(line):
             start = word.start if i else line[0].start
             end = line[i + 1].start if i + 1 < len(line) else line_end
             if end <= start:
                 continue
-            parts = []
-            for j, other in enumerate(line):
-                text = escape(other.text.upper() if style.uppercase else other.text)
-                parts.append(f"{{\\c{highlight}}}{text}{{\\c&HFFFFFF&}}" if j == i else text)
+            parts = [active_word(t, preset, highlight) if j == i else t for j, t in enumerate(texts)]
             subs.append(
-                pysubs2.SSAEvent(
-                    start=round(start * 1000),
-                    end=round(end * 1000),
-                    style="Words",
-                    text=f"{{\\pos({WIDTH // 2},{center_y})}}" + " ".join(parts),
-                )  # fmt: skip
-            )
+                pysubs2.SSAEvent(start=round(start * 1000), end=round(end * 1000), style="Words",
+                                 text=position + " ".join(parts))
+            )  # fmt: skip
     if hook:
         subs.append(pysubs2.SSAEvent(start=0, end=round(min(HOOK_SECONDS, clip_duration) * 1000), style="Hook",
                                      text=f"{{\\pos({WIDTH // 2},{hook_y})}}{escape(hook.upper())}"))  # fmt: skip
@@ -123,6 +133,15 @@ def build_ass(
         subs.append(pysubs2.SSAEvent(start=0, end=round(clip_duration * 1000), style="Small",
                                      text=f"{{\\pos({MARGIN_L},150)\\c&H3030FF&}}{escape(watermark)}"))  # fmt: skip
     return subs
+
+
+def active_word(text: str, preset: str, highlight: str) -> str:
+    """Mot prononcé selon le style : néon (couleur), boîte (bloc de couleur, texte noir), contour (contour coloré)."""
+    if preset == "box":
+        return rf"{{\3c{highlight}\bord18\c&H000000&}}{text}{{\r}}"
+    if preset == "outline":
+        return rf"{{\3c{highlight}\bord10\fscx108\fscy108}}{text}{{\r}}"
+    return rf"{{\c{highlight}}}{text}{{\c&HFFFFFF&}}"
 
 
 def save_ass(subs: pysubs2.SSAFile, path: Path) -> Path:

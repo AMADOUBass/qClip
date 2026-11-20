@@ -127,33 +127,41 @@ def render_clip(
     hook: str,
     mention: str,
     test_only: bool,
+    overlay: tuple[Path, Any] | None = None,
+    variant: str | None = None,
 ) -> dict[str, Any]:
-    """Rend un candidat. Écrit clip.mp4 + clip.ass + clip.words.tsv (texte corrigeable à la main)."""
+    """Rend un candidat. Écrit clip.mp4 + clip.ass + clip.words.tsv (mots affichés, pour contrôle).
+
+    `words` arrive déjà corrigé par l'éditeur (seule source des corrections depuis M8 ; clip.words.tsv est régénéré).
+    `overlay` = (image, Overlay du brief) incrustée sous les sous-titres ; `variant` = style des sous-titres."""
     video = work / candidate["file"]
     start, duration = candidate["file_start"], candidate["duration"]
     words_tsv = out_path.with_suffix(".words.tsv")
     span = (candidate["start"], candidate["end"])
-    timed = load_words_tsv(words_tsv, span) if words_tsv.exists() else None
-    if timed is None:
-        if words_tsv.exists():  # passage modifié (nouveaux réglages) : les temps ne valent plus, on garde l'ancien
-            words_tsv.replace(words_tsv.with_suffix(".tsv.old"))
-        timed = [
-            TimedWord(w["text"], round(w["start"] - span[0], 3), round(w["end"] - span[0], 3))
-            for w in words if span[0] <= w["start"] and w["end"] <= span[1]
-        ]  # fmt: skip
+    inside = [w for w in words if span[0] <= w["start"] and w["end"] <= span[1]]
+    timed = [TimedWord(w["text"], round(w["start"] - span[0], 3), round(w["end"] - span[0], 3)) for w in inside]
     save_words_tsv(timed, words_tsv, span)
     ass = save_ass(
         build_ass(timed, subtitle_style, layout.subs_y, duration, hook=hook, hook_y=layout.hook_y, mention=mention,
-                  watermark=WATERMARK if test_only else ""),
+                  watermark=WATERMARK if test_only else "", variant=variant),
         out_path.with_suffix(".ass"),
     )  # fmt: skip
     loud = measure_loudness(video, start, duration)
     # Chemins relatifs + cwd = racine du projet : pas d'échappement de « C:\ » dans la syntaxe des filtres.
     ass_rel = ass.relative_to(ROOT).as_posix()
     fonts_rel = FONTS_DIR.relative_to(ROOT).as_posix()
-    graph = f"{layout.filter};[v]subtitles={ass_rel}:fontsdir={fonts_rel}[out]"
+    inputs: list[str | Path] = ["-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", video]
+    if overlay:
+        # Overlay du brief (image fixe) incrusté sous les sous-titres : jamais caché par eux.
+        image, spec = overlay
+        inputs += ["-i", image]
+        x, y, w = round(spec.x * WIDTH), round(spec.y * HEIGHT), round(spec.width * WIDTH)
+        graph = (f"{layout.filter};[1:v]scale={w}:-1[ov];[v][ov]overlay={x}:{y}[vo];"
+                 f"[vo]subtitles={ass_rel}:fontsdir={fonts_rel}[out]")  # fmt: skip
+    else:
+        graph = f"{layout.filter};[v]subtitles={ass_rel}:fontsdir={fonts_rel}[out]"
     result = run(
-        ["ffmpeg", "-y", "-hide_banner", "-v", "error", "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", video,
+        ["ffmpeg", "-y", "-hide_banner", "-v", "error", *inputs,
          "-filter_complex", graph, "-map", "[out]", "-map", "0:a:0", *encoder_args(encoder),
          "-af", loudnorm_filter(loud, lufs), "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
          "-movflags", "+faststart", out_path],
@@ -162,33 +170,17 @@ def render_clip(
     )  # fmt: skip
     if result.returncode != 0:
         raise RuntimeError(f"rendu impossible ({encoder}) : {last_line(result.stderr)}")
-    return {"input_lufs": float(loud["input_i"]), "words": len(timed), "ass": ass.name, "words_tsv": words_tsv.name}
+    return {"input_lufs": float(loud["input_i"]), "words": len(timed), "ass": ass.name, "words_tsv": words_tsv.name,
+            "overlay": bool(overlay), "style": variant or subtitle_style.style}  # fmt: skip
 
 
 def save_words_tsv(words: list[TimedWord], path: Path, span: tuple[float, float]) -> None:
     lines = [
-        f"# passage {span[0]:.3f} {span[1]:.3f}   (temps VOD ; ne pas modifier cette ligne)",
-        "# début\tfin\ttexte   (secondes depuis le début du clip ; corriger la 3e colonne puis relancer le rendu)",
+        f"# passage {span[0]:.3f} {span[1]:.3f}   (temps VOD)",
+        "# début\tfin\ttexte   (fichier GÉNÉRÉ à chaque rendu : corriger les mots dans l'éditeur de l'interface)",
     ]
     lines += [f"{w.start:.3f}\t{w.end:.3f}\t{w.text}" for w in words]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def load_words_tsv(path: Path, span: tuple[float, float]) -> list[TimedWord] | None:
-    """Mots (éventuellement corrigés à la main) du clip, ou None si le fichier décrit un autre passage."""
-    words = []
-    same_span = False
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.startswith("# passage "):
-            start, end = (float(v) for v in line.split()[2:4])
-            same_span = abs(start - span[0]) < 0.001 and abs(end - span[1]) < 0.001
-            continue
-        if not line.strip() or line.startswith("#"):
-            continue
-        start_s, end_s, text = line.split("\t", 2)
-        if text.strip():
-            words.append(TimedWord(text.strip(), float(start_s), float(end_s)))
-    return words if same_span else None
 
 
 def render_candidates(
@@ -200,10 +192,15 @@ def render_candidates(
     layout_name: str | None = None,
     hook: str | None = None,
     force: bool = False,
+    kept_only: bool = False,
 ) -> list[dict[str, Any]]:
-    """Rend les candidats choisis (ids ou top N) → output/<campagne>/<id>/ (ou work/<id>/renders/ si test_only)."""
-    from qclip.campaign import load_campaign
+    """Rend les candidats choisis → output/<campagne>/<id>/ (ou work/<id>/renders/ si test_only).
+
+    Choix : `ids`, sinon les moments gardés au tri (`kept_only`), sinon les N meilleurs non rejetés.
+    Réglages de l'éditeur (edits.json) appliqués : bornes, layout, style, accroche, corrections de mots."""
+    from qclip.campaign import ASSETS_DIR, load_campaign
     from qclip.config import load_config
+    from qclip.edits import apply_edit, corrected, load_edits
     from qclip.facecam import Facecam, detect_for_clip
     from qclip.ingest import load_fetched
     from qclip.sources import WORK_DIR
@@ -214,10 +211,18 @@ def render_candidates(
     work = WORK_DIR / vid
     data = json.loads((work / "candidates.json").read_text(encoding="utf-8"))
     rerank = load_rerank(vid)
+    edits = load_edits(vid)
     limit = top or config.clips.top_n
-    # Sans --ids : les N meilleurs selon le LLM s'il y a un rerank, sinon selon le score des signaux.
-    by_id = [c for c in data["candidates"] if c["id"] in ids] if ids else []
-    chosen = by_id if ids else ordered(data["candidates"], rerank)[:limit]
+    # Sans --ids : les moments gardés au tri, ou les N meilleurs (LLM s'il y a un rerank, sinon signaux) non rejetés.
+    if ids:
+        chosen = [c for c in data["candidates"] if c["id"] in ids]
+    elif kept_only:
+        chosen = [c for c in data["candidates"] if edits.get(c["window"], {}).get("decision") == "keep"]
+        if not chosen:
+            raise RuntimeError("aucun moment gardé : trier d'abord les moments")
+    else:
+        pool = [c for c in data["candidates"] if edits.get(c["window"], {}).get("decision") != "reject"]
+        chosen = ordered(pool, rerank)[:limit]
     if ids and len(chosen) != len(ids):
         raise RuntimeError(f"candidats introuvables : {sorted(set(ids) - {c['id'] for c in chosen})}")
     if hook and len(chosen) != 1:
@@ -228,10 +233,16 @@ def render_candidates(
         steps.info(f"campagne de test : rendus dans {out_dir.relative_to(ROOT)} avec le bandeau « {WATERMARK} »")
 
     windows = load_fetched(vid)
+    window_end = {w["rank"]: w["start"] + w["duration"] for w in windows}
     probe = ffprobe(work / "windows" / windows[0]["file"])
-    wanted = layout_name or brief.layout
     encoder = pick_encoder(config.render.encoder)
     mention = brief.required.mention
+    overlay = None
+    if brief.overlay:
+        image = ASSETS_DIR / slug / brief.overlay.file
+        if not image.exists():
+            raise RuntimeError(f"overlay obligatoire introuvable : {image} (l'ajouter depuis le brief)")
+        overlay = (image, brief.overlay)
 
     results = []
     for c in chosen:
@@ -239,24 +250,30 @@ def render_candidates(
         if out_path.exists() and not force:
             steps.info(f"clip_{c['id']}.mp4 existe déjà (--force pour refaire)")
             continue
+        edit = edits.get(c["window"], {})
+        all_words = json.loads(transcript_path(work / "windows", c["window"]).read_text(encoding="utf-8"))["words"]
+        words = corrected(all_words, edit.get("corrections", {}))
+        c = apply_edit(c, edit, words, window_end[c["window"]])
+        wanted = layout_name or edit.get("layout") or brief.layout
         # La scène change pendant un live : la facecam se cherche dans chaque clip.
         facecam: Facecam | None = None
         if wanted == "facecam":
             if brief.facecam:
                 facecam = Facecam("overlay", None, brief.facecam, "brief")
             else:
+                cache = work / "facecam" / f"w{c['window']:02d}_{c['start']:.1f}.json"  # dépend du passage
                 facecam = detect_for_clip(work / c["file"], c["file_start"], c["duration"], probe.width,
-                                          probe.height, work / "facecam" / f"cand_{c['id']}.json", force)  # fmt: skip
+                                          probe.height, cache, force)  # fmt: skip
         layout, warning = choose_layout(wanted, facecam, config.render.fps, probe.width, probe.height)
         if warning:
             steps.info(f"clip {c['id']} : {warning}")
-        words = json.loads(transcript_path(work / "windows", c["window"]).read_text(encoding="utf-8"))["words"]
         inside = [w for w in words if c["start"] <= w["start"] and w["end"] <= c["end"]]
         llm = rerank.get(rerank_key(c), {})
-        clip_hook = hook if hook is not None else llm.get("hook") or make_hook(inside, c["start"], config.keywords)
+        clip_hook = hook if hook is not None else (
+            edit.get("hook") or llm.get("hook") or make_hook(inside, c["start"], config.keywords))  # fmt: skip
         with steps.step(f"clip {c['id']} ({c['duration']:.0f} s, {layout.name}, {encoder})"):
             info = render_clip(c, work, out_path, layout, words, config.subtitle, config.render.lufs, encoder,
-                               clip_hook, mention, brief.test_only)  # fmt: skip
+                               clip_hook, mention, brief.test_only, overlay, edit.get("style"))  # fmt: skip
         meta = {"candidate": c, "layout": layout.name, "facecam": asdict(facecam) if facecam else None,
                 "encoder": encoder, "hook": clip_hook, "layout_filter": layout.filter, **info}  # fmt: skip
         out_path.with_suffix(".render.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), "utf-8")
@@ -314,7 +331,7 @@ def write_meta(
         "source": {"video_id": vid, "vod_start": c["start"], "vod_end": c["end"]},
         "llm": llm or None,
         "test_only": brief.test_only,
-        "compliance": compliance(brief, duration, caption, title),
+        "compliance": compliance(brief, duration, caption, title, render_info.get("overlay", False)),
     }
     clip.with_suffix(".caption.txt").write_text(caption, encoding="utf-8")
     clip.with_suffix(".json").write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")

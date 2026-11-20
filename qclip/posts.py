@@ -15,7 +15,7 @@ from qclip.config import ConfigError
 from qclip.sources import INPUT_DIR
 
 FIELDS = ["video_id", "clip_id", "vod_start", "vod_end", "duration", "title", "clip_file", "source_url",
-          "rendered_at", "platform", "post_url", "views", "logged_at"]  # fmt: skip
+          "rendered_at", "platform", "post_url", "views", "logged_at", "paid", "paid_at"]  # fmt: skip
 PLATFORMS = ("tiktok", "shorts", "reels")
 
 
@@ -74,8 +74,10 @@ def find_rendered(rows: list[dict[str, str]], clip: str) -> dict[str, str]:
     return matches[0]
 
 
-def log_post(slug: str, clip: str, platform: str, url: str | None, views: int | None) -> dict[str, str]:
-    """Enregistre l'URL d'un post (et/ou ses vues) pour une plateforme."""
+def log_post(
+    slug: str, clip: str, platform: str, url: str | None, views: int | None, paid: float | None = None
+) -> dict[str, str]:
+    """Enregistre l'URL d'un post, ses vues et/ou ce qui a été payé pour ce post."""
     brief = load_campaign(slug)
     if brief.test_only:
         raise ConfigError(f"{slug!r} est une campagne de test : ses clips ne doivent pas être postés")
@@ -99,9 +101,24 @@ def log_post(slug: str, clip: str, platform: str, url: str | None, views: int | 
         target["post_url"] = url
     if views is not None:
         target["views"] = str(views)
+    if paid is not None:
+        if paid < 0:
+            raise ConfigError("montant payé négatif")
+        target["paid"] = f"{paid:.2f}"
+        target["paid_at"] = now()
     target["logged_at"] = now()
     write_posts(slug, rows)
     return target
+
+
+def estimate(views: int, rate_per_1k: float, payout_min: float | None, payout_max: float | None) -> float:
+    """Gain estimé d'un post : vues / 1000 × tarif, 0 sous le minimum du brief, plafonné au maximum."""
+    value = views / 1000 * rate_per_1k
+    if payout_min is not None and value < payout_min:
+        return 0.0
+    if payout_max is not None:
+        value = min(value, payout_max)
+    return round(value, 2)
 
 
 @dataclass
@@ -109,8 +126,11 @@ class Stats:
     rendered: int
     posted: int  # posts (une ligne par plateforme)
     views: int
-    earnings: float
+    earnings: float  # gains estimés (vues × tarif, min / max du brief)
     by_platform: dict[str, tuple[int, int]]  # plateforme → (posts, vues)
+    paid: float = 0.0  # réellement payé (saisi)
+    budget_total: float | None = None
+    budget_left: float | None = None
 
 
 def campaign_stats(slug: str) -> Stats:
@@ -123,7 +143,12 @@ def campaign_stats(slug: str) -> Stats:
         n, v = by_platform.get(r["platform"], (0, 0))
         by_platform[r["platform"]] = (n + 1, v + int(r["views"] or 0))
     views = sum(v for _, v in by_platform.values())
-    return Stats(rendered, len(posted_rows), views, round(views / 1000 * brief.rate_per_1k, 2), by_platform)
+    earnings = sum(
+        estimate(int(r["views"] or 0), brief.rate_per_1k, brief.payout_min, brief.payout_max) for r in posted_rows
+    )
+    paid = round(sum(float(r["paid"] or 0) for r in rows), 2)
+    left = round(brief.budget_total - paid, 2) if brief.budget_total is not None else None
+    return Stats(rendered, len(posted_rows), views, round(earnings, 2), by_platform, paid, brief.budget_total, left)
 
 
 def posted_ranges(slug: str, video_id: str) -> list[tuple[float, float]]:

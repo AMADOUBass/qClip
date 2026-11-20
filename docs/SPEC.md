@@ -344,3 +344,29 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     réalistes (3-7), qualité des textes toujours insuffisante. **`use_llm: false` reste le défaut.**
     Garde-fou : accroche / titre du LLM contenant un gros mot → ignorés, retour au gabarit (`rerank.PROFANITY`).
     À retester avec un modèle plus gros (`qwen3.5:4b`, 3,3 Go) si la RAM le permet (8 Go ici, ~2 Go libres).
+- **M8 — étape 1 (cœur + API), 2026-11-20**
+  - Fonctions de M6 visibles dans les maquettes (alerte démonétisation, layout Recadrage, variation anti-doublon) :
+    **affichées mais grisées « disponible en M6 »** (choix de l'utilisateur : « la meilleure solution »).
+  - **Brief étendu** (tous les champs optionnels, les anciens briefs restent valides) : `brief_url`, `source_platform`,
+    `channel`, `source_rule`, `budget_total`, `payout_min` / `payout_max` (par clip), `overlay` {file, x, y, width}
+    (image dans `campaigns/assets/<slug>/`, **incrustée au rendu sous les sous-titres**), `requirements`
+    (lien en bio, compte dédié, description liée, délai de soumission), `audience`. `save_brief` écrit le YAML
+    validé (les commentaires sont perdus quand l'interface enregistre).
+  - `posts.csv` : colonnes `paid` / `paid_at` (`qclip log --paid`). Gain estimé par post = vues / 1000 × tarif,
+    **0 sous `payout_min`**, plafonné à `payout_max`. Budget restant = budget − payé.
+  - `work/<id>/edits.json` (clé = numéro de plage, stable) : décision du tri (keep / reject / skip), bornes ajustées
+    (recalées pour ne jamais couper un mot), layout, style, accroche, **corrections de mots** (clé = début VOD du mot).
+    `qclip render --kept` rend les moments gardés ; sans `--ids`, les rejetés sont exclus.
+  - **Corrections : l'éditeur est la seule source** ; `clip_<n>.words.tsv` devient un fichier de sortie régénéré
+    (la fusion avec des corrections faites à la main dans le TSV réinjectait d'anciennes corrections — bug corrigé).
+  - Styles de sous-titres (`subtitle.style`, réglable par clip) : `neon` (mot coloré), `box` (bloc jaune, texte noir),
+    `outline` (contour coloré), `karaoke` (remplissage `\kf` au fil de la voix).
+  - Gros mots (`meta.PROFANITY`) : jamais dans une accroche ni un titre, ni par gabarit ni par LLM (aussi à la lecture
+    des anciens `rerank.json`). Les sous-titres restent fidèles à la parole.
+  - `qclip process <campagne>` : chaîne complète (scout → fetch → ingest → transcribe → candidates), étapes annoncées.
+  - `qclip serve` (FastAPI, **127.0.0.1:8765 uniquement**) : routes de lecture (`overview.py`, aucune logique dans
+    l'API), écriture (brief, overlay, ajout de VOD = ajout aux sources du brief + analyse, réglages, corrections,
+    rendu, log), médias sous `/media/` limités à `work/`, `output/`, `campaigns/assets/` (Range : 206), file de tâches
+    (`jobs.py`, **une à la fois**, étape / « N/total » / temps restant / journal), état en direct sur `/api/events` (SSE).
+  - Score affiché dans l'interface = score des signaux ramené sur 10 (meilleur moment = 10) ; la note du LLM, si
+    elle existe, est affichée à part (le 2B n'est pas fiable).

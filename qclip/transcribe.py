@@ -45,8 +45,8 @@ def transcribe_windows(
         transcriber = get_transcriber(backend, model, quantization, language, threads, prompt)
     results = []
     try:
-        for w, vocals in todo:
-            with steps.step(f"plage {w['rank']:02d} ({w['duration']:.0f} s)"):
+        for i, (w, vocals) in enumerate(todo, 1):
+            with steps.step(f"plage {i}/{len(todo)} (n°{w['rank']:02d}, {w['duration']:.0f} s)"):
                 words = transcriber.transcribe(vocals)
             offset = float(w["start"])
             data = {

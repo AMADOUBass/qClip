@@ -14,11 +14,20 @@ class Steps:
         on_start: Callable[[str], None] | None = None,
         on_done: Callable[[str, float], None] | None = None,
         on_info: Callable[[str], None] | None = None,
+        on_stage: Callable[[str], None] | None = None,
     ) -> None:
         self.on_start = on_start
         self.on_done = on_done
         self.on_info = on_info
+        self.on_stage = on_stage
         self.timings: dict[str, float] = {}
+
+    def stage(self, name: str) -> None:
+        """Annonce une grande étape (repérage, téléchargement, transcription…) : l'interface affiche où on en est."""
+        if self.on_stage:
+            self.on_stage(name)
+        elif self.on_info:
+            self.on_info(f"— {name} —")
 
     @contextmanager
     def step(self, name: str) -> Generator[None]:
