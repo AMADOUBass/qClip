@@ -1518,6 +1518,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rich" },
+    { name = "transformers" },
     { name = "typer" },
     { name = "yt-dlp", extra = ["default"] },
 ]
@@ -1544,6 +1545,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "qwen-asr", marker = "extra == 'qwen'", specifier = ">=0.0.6" },
     { name = "rich", specifier = ">=15.0.0" },
+    { name = "transformers", specifier = ">=4.57.6" },
     { name = "typer", specifier = ">=0.29.1" },
     { name = "yt-dlp", extras = ["default"], specifier = ">=2026.10.26" },
 ]

@@ -255,3 +255,27 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
   - Sans séparation, `other.wav` = l'audio complet (mono 48 kHz) : c'est ce que CLAP écoutera en M3.
   - Transcriptions : `work/<id>/windows/w_<n>.transcript.json`, mots en **temps de la VOD** + `window_start`
     (temps dans le fichier de la plage = `start - window_start`). Le prompt (nom du créateur) ne sert qu'à Whisper.
+- **M3, 2026-11-19**
+  - Nouvelle commande `qclip candidates <campagne> [--video] [--clap/--no-clap] [--scenes/--no-scenes] [--force]`
+    (remplace `qclip score` : calcule les signaux fins, choisit un passage par plage, affiche le tableau de revue §4.7).
+  - Signaux fins sur une grille de 0,5 s, en cache par plage (`w_<n>.signals.npz`, `w_<n>.clap.npy`) :
+    chat (z du scout, déjà recalé), volume de la voix, CLAP (max des libellés d'événements), parole
+    (débit mots/s + 2 × mots-clés + exclamations). **Normalisation commune à toutes les plages** (z « poolé ») :
+    chaque plage est comparée au niveau habituel de la VOD, pas à elle-même.
+  - CLAP : `laion/clap-htsat-unfused`, extraits de 4 s tous les 3 s (RTF ≈ 0,11), libellés « de fond » ajoutés
+    (parole calme, musique, silence, jeu) pour que le softmax ne désigne pas toujours un événement.
+    Sur ce stream, « people laughing » a un niveau de base élevé (≈ 0,76) : seul l'écart à ce niveau compte.
+  - Coupes de scène : **filtre `scdet` de ffmpeg** (10 i/s, image 320 px, `-skip_loop_filter all`) au lieu de
+    PySceneDetect : même principe, décodage natif plus rapide, pas de dépendance. 12,5 s par plage de 85 s.
+    Le décodage QSV échoue sur ce PC (« MFX session -9 ») alors que l'encodage QSV marche.
+  - Passage choisi (`score.choose_segment`) : pic du score lissé sur 3 s → début = phrase en cours à « pic − preroll »,
+    fin = première fin de phrase après « retombée sous 35 % du pic + 2,5 s » ; trop court → phrases ajoutées avant
+    (contexte) puis après ; trop long → phrases retirées au début (sans dépasser le pic) puis fin à une fin de phrase ;
+    marge de 0,15 s sans mordre sur un mot voisin ; coupe de scène à moins d'1 s d'une borne = nouvelle borne.
+    Frontière de phrase = ponctuation finale ou pause ≥ 0,6 s.
+  - Score d'un candidat = moyenne du score combiné à ± 2 s du pic. Doublons > 30 % de recouvrement supprimés.
+  - Raisons affichées : chat ×N (activité autour du pic / moyenne de la VOD), événements CLAP ≥ 0,5, voix forte,
+    mots-clés, exclamations, débit rapide.
+  - Sur la VOD de test : 24 candidats en 7 min 20 (coupes ≈ 5 min, CLAP ≈ 2 min), aucun mot coupé, 24/24 en début
+    de phrase, durées 16-22 s avec preroll 3 s. **Preroll passé à 8 s** (demande) : 16-24 s, médiane 19 s ; le début
+    était déjà ramené au début de phrase, c'est la fin (retombée + 2,5 s) qui limite la longueur.

@@ -13,9 +13,9 @@ from yt_dlp.utils import DownloadError
 
 from qclip import ROOT
 from qclip import doctor as doctor_mod
-from qclip.asr import BACKENDS  # noqa: F401  (aide de --backend)
 from qclip.bench import SEP_MODELS, AsrResult, bench_asr, bench_sep
 from qclip.campaign import load_brief, load_campaign, new_campaign
+from qclip.candidates import build_candidates
 from qclip.config import ConfigError, cpu_threads, load_config
 from qclip.fetch import fetch_windows
 from qclip.ingest import ingest_windows
@@ -284,3 +284,35 @@ def bench_sep_cmd(
     console.print(bench_table(f"bench-sep — {audio.name}", results, "audio brut"))
     for r in results:
         console.print(f"\n[bold]{r.name}[/] : {r.text}", soft_wrap=True)
+
+
+@app.command()
+def candidates(
+    campaign: Annotated[str, typer.Argument(help="Slug de la campagne")],
+    video: Annotated[str | None, typer.Option(help="video_id (work/<video_id>/)")] = None,
+    clap: Annotated[bool | None, typer.Option(help="Événements audio CLAP (défaut : config.yaml)")] = None,
+    scenes: Annotated[bool | None, typer.Option(help="Coupes de scène (défaut : config.yaml)")] = None,
+    force: Annotated[bool, typer.Option(help="Recalculer les signaux en cache")] = False,
+) -> None:
+    """Signaux fins sur chaque plage + meilleur passage de chacune → candidates.json, classés par score."""
+    start = time.perf_counter()
+    try:
+        load_campaign(campaign)
+        for vid in campaign_videos(campaign, video):
+            console.rule(vid)
+            found = build_candidates(campaign, vid, console_steps(), use_clap=clap, use_scenes=scenes, force=force)
+            table = Table(title=f"{len(found)} candidats — {vid}", show_lines=True)
+            for column in ["#", "Début", "Durée", "Score"]:
+                table.add_column(column, justify="right")
+            for column in ["Plage", "Raisons", "Extrait"]:
+                table.add_column(column)
+            for c in found:
+                table.add_row(
+                    str(c["id"]), format_hms(c["start"]), f"{c['duration']:.0f} s", f"{c['score']:.2f}",
+                    f"w_{c['window']:02d} @ {c['file_start']:.0f} s", ", ".join(c["reasons"]) or "—",
+                    c["text"][:140] + ("…" if len(c["text"]) > 140 else ""),
+                )  # fmt: skip
+            console.print(table)
+    except USER_ERRORS as e:
+        raise fail(e) from e
+    console.print(f"Total : {time.perf_counter() - start:.1f} s")
