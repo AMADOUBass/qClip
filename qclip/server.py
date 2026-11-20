@@ -119,6 +119,10 @@ def create_app(queue: JobQueue | None = None) -> FastAPI:
     def campaign(slug: str) -> dict[str, Any]:
         return {**overview.brief_view(slug), "summary": overview.campaign_summary(slug)}
 
+    @app.get("/api/vods")
+    def vod_list() -> list[dict[str, Any]]:
+        return overview.vods()
+
     @app.get("/api/vods/{vid}")
     def vod(vid: str) -> dict[str, Any]:
         return overview.vod_overview(check_vid(vid))

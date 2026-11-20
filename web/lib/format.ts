@@ -31,3 +31,17 @@ export const greeting = (date = new Date()) => {
   const h = date.getHours();
   return h < 5 || h >= 18 ? "Bonsoir" : "Bonjour";
 };
+
+/** Durée d'une étape façon maquette : « 6 min 08 », « 41 s », « 1 h 05 ». */
+export const span = (seconds: number) => {
+  const s = Math.round(seconds);
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}`;
+  return `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
+};
+
+/** Longueur d'une VOD : « 6 h 12 », « 30 min ». */
+export const hm = (seconds: number) => {
+  const m = Math.round(seconds / 60);
+  return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `${m} min`;
+};

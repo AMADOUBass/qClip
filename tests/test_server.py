@@ -1,11 +1,13 @@
+import json
 import time
 
 import pytest
 from fastapi.testclient import TestClient
 
+from qclip import overview
 from qclip.jobs import JobQueue
 from qclip.server import create_app
-from qclip.steps import Steps
+from qclip.steps import Steps, merge_timings, zone_rank
 
 
 def wait(queue: JobQueue, job_id: int, timeout: float = 5.0) -> dict:
@@ -67,3 +69,57 @@ def test_api_errors_are_clear(client: TestClient) -> None:
     assert r.status_code == 400 and "slug" in r.json()["detail"]
     assert client.get("/api/jobs/999").status_code == 404
     assert client.get("/api/system").json()["ram_total_gb"] > 0
+
+
+def test_job_knows_its_vod_as_soon_as_announced() -> None:
+    queue = JobQueue()
+    seen: list[str | None] = []
+
+    def work(steps: Steps) -> str:
+        steps.video("kick-abc")  # annoncé par le repérage, bien avant la fin
+        job = queue.get(1)
+        seen.append(job.video_id if job else None)
+        return "kick-abc"
+
+    job = queue.submit("process", "Analyse", "demo", work)
+    wait(queue, job.id)
+    assert seen == ["kick-abc"]
+
+
+def test_steps_time_stages_and_zones() -> None:
+    steps = Steps()
+    steps.stage("téléchargement")
+    for i in (1, 2):
+        with steps.step(f"plage {i:02d}/24"):
+            time.sleep(0.01)
+    steps.stage("transcription")
+    with steps.step("chargement de parakeet"):
+        pass
+    with steps.step("plage 1/3 (n°22, 75 s)"):  # compteur 1/3, mais c'est la zone 22
+        pass
+    steps.end_stage()
+    assert set(steps.stage_times) == {"téléchargement", "transcription"}
+    assert set(steps.zone_times["téléchargement"]) == {1, 2}
+    assert set(steps.zone_times["transcription"]) == {22}
+    assert [zone_rank(n) for n in ["CLAP plage 05", "score + fenêtres", "plage 3/24"]] == [5, None, 3]
+    old = {"audio": 42.0, "chat": 3.0}
+    assert merge_timings(old, {"audio": 0.01, "chat": 5.0, "score": 0.1}) == {"audio": 42.0, "chat": 5.0, "score": 0.1}
+
+
+def test_stage_rates_use_zones_really_processed(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(overview, "WORK_DIR", tmp_path)
+    assert overview.stage_rates(False) == overview.DEFAULT_RATES
+    for name, zones in [("a", [20.0, 24.0]), ("b", [30.0])]:
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "timings.json").write_text(
+            json.dumps({"windows": 24, "stages": {"transcription": 79.0}, "per_zone": {"transcription": zones}}),
+            encoding="utf-8",
+        )
+    rates = overview.stage_rates(True)
+    assert rates["transcription"] == 24.0 and rates["séparation"] == overview.SEPARATION_RATE
+
+
+def test_vod_list(client: TestClient) -> None:
+    vods = client.get("/api/vods").json()
+    assert isinstance(vods, list)
+    assert all({"video_id", "title", "campaign"} <= set(v) for v in vods)

@@ -180,19 +180,27 @@ def vod_overview(vid: str) -> dict[str, Any]:
              [("fetched", "audio", "transcribed"), ("audio", "transcribed"), ("transcribed",)]}  # fmt: skip
     candidates = read_json(work / "candidates.json")
     config = load_config()
+    measured = read_json(work / "timings.json", {}).get("stages", {})
+    rates = stage_rates(config.separation.enabled)
     stages: list[dict[str, Any]] = [
-        {"name": "Repérage", "state": "done", "seconds": round(sum(scout.get("timings", {}).values()), 1),
+        {"key": "repérage", "name": "Repérage", "state": "done",
+         "seconds": round(sum(scout.get("timings", {}).values()), 1),
          "steps": [{"name": k, "seconds": round(v, 1)} for k, v in scout.get("timings", {}).items()]},
-        {"name": f"Téléchargement des {total} zones vidéo", "done": count[("fetched", "audio", "transcribed")],
-         "total": total},
-        {"name": "Séparation de la voix" if config.separation.enabled else "Extraction de l'audio",
+        {"key": "téléchargement", "name": f"Téléchargement des {total} zones vidéo",
+         "done": count[("fetched", "audio", "transcribed")], "total": total},
+        {"key": "séparation", "name": "Séparation de la voix" if config.separation.enabled else "Extraction de l'audio",
          "done": count[("audio", "transcribed")], "total": total},
-        {"name": f"Transcription ({config.asr.backend.capitalize()}, {brief.language.upper()})",
+        {"key": "transcription", "name": f"Transcription ({config.asr.backend.capitalize()}, {brief.language.upper()})",
          "done": count[("transcribed",)], "total": total},
-        {"name": "Détection des moments", "done": 1 if candidates else 0, "total": 1},
+        {"key": "détection", "name": "Détection des moments", "done": 1 if candidates else 0, "total": 1},
     ]  # fmt: skip
     for s in stages[1:]:
         s["state"] = "done" if s["done"] >= s["total"] else ("running" if s["done"] else "waiting")
+        if s["key"] in measured:
+            s["seconds"] = measured[s["key"]]
+        # temps restant estimé d'après les VOD déjà traitées sur cette machine (secondes par zone)
+        left = total * (s["total"] - s["done"]) / s["total"]
+        s["estimate_s"] = round(left * rates[s["key"]]) if s["state"] != "done" else 0
     return {
         "video_id": vid,
         "campaign": scout["campaign"],
@@ -210,7 +218,36 @@ def vod_overview(vid: str) -> dict[str, Any]:
         "stages": stages,
         "candidates": len(candidates["candidates"]) if candidates else 0,
         "ready_windows": count[("transcribed",)],
+        "zones_seconds": round(sum(w["end"] - w["start"] for w in scout["windows"]), 1),
     }
+
+
+# Secondes par zone de 75 s quand aucune VOD n'a encore été mesurée (ordres de grandeur du SPEC §10, M1-M3).
+DEFAULT_RATES = {"téléchargement": 10.0, "séparation": 2.0, "transcription": 22.0, "détection": 10.0}
+SEPARATION_RATE = 160.0  # RTF ≈ 2,1 (UVR-MDX-NET-Voc_FT) sur 75 s
+
+
+def stage_rates(separation: bool) -> dict[str, float]:
+    """Secondes par zone de chaque grande étape : médiane des zones vraiment traitées sur cette machine
+    (timings.json → per_zone, sans les reprises depuis le cache), sinon valeurs par défaut."""
+    rates = {**DEFAULT_RATES, "séparation": SEPARATION_RATE if separation else DEFAULT_RATES["séparation"]}
+    measured: dict[str, list[float]] = {}
+    for path in WORK_DIR.glob("*/timings.json"):
+        for key, seconds in read_json(path, {}).get("per_zone", {}).items():
+            if key in rates:
+                measured.setdefault(key, []).extend(seconds)
+    return {**rates, **{k: round(float(np.median(v)), 1) for k, v in measured.items()}}
+
+
+def vods() -> list[dict[str, Any]]:
+    """VOD repérées, la plus récente d'abord (écran VOD sans identifiant)."""
+    items = []
+    for path in WORK_DIR.glob("*/scout.json"):
+        scout = read_json(path, {})
+        items.append({"video_id": path.parent.name, "title": scout.get("title") or path.parent.name,
+                      "campaign": scout.get("campaign"), "duration": scout.get("duration"),
+                      "updated": path.stat().st_mtime})  # fmt: skip
+    return sorted(items, key=lambda v: v["updated"], reverse=True)
 
 
 # --- tri (écran 4) ----------------------------------------------------------------------------------

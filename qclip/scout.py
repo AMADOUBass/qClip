@@ -15,7 +15,7 @@ from qclip.chat import ChatMessage, download_chat, is_noise, is_reaction, load_c
 from qclip.config import Config, load_config
 from qclip.posts import posted_ranges
 from qclip.sources import WORK_DIR, download_audio, load_info, twitch_vod_id, video_id
-from qclip.steps import Steps
+from qclip.steps import Steps, merge_timings
 from qclip.utils.audio import loudness_per_second
 
 MAX_OVERLAP = 0.3  # deux fenêtres ne se recouvrent jamais à plus de 30 %
@@ -114,7 +114,12 @@ def scout_source(slug: str, url: str, steps: Steps, force: bool = False) -> dict
     config = load_config()
     check_source(load_campaign(slug), slug, url)
     vid = video_id(url)
+    steps.video(vid)
     work = WORK_DIR / vid
+    old_scout = work / "scout.json"
+    previous = {}  # temps mesurés la première fois : une reprise depuis le cache ne doit pas les écraser
+    if old_scout.exists() and not force:
+        previous = json.loads(old_scout.read_text(encoding="utf-8")).get("timings", {})
     if force:
         for name in ["info.json", "chat.json", "loudness.npy", "scout.json", "scout_signals.npz"]:
             (work / name).unlink(missing_ok=True)
@@ -183,7 +188,7 @@ def scout_source(slug: str, url: str, steps: Steps, force: bool = False) -> dict
         "has_chat": chat is not None,
         "chat_messages": len(messages or []),
         "params": {**config.scout.model_dump(), "count": count, "weights": config.weights.model_dump()},
-        "timings": {k: round(v, 2) for k, v in steps.timings.items()},
+        "timings": merge_timings(previous, {k: round(v, 2) for k, v in steps.timings.items()}),
         "windows": [asdict(w) for w in windows],
     }
     (work / "scout.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -7,7 +7,7 @@ import pytest
 from qclip.campaign import CAMPAIGNS_DIR, TEMPLATE_NAME, check_source, load_brief
 from qclip.chat import ChatMessage, is_noise, is_reaction, load_chat
 from qclip.config import ConfigError
-from qclip.sources import safe_id, twitch_vod_id
+from qclip.sources import find_output, safe_id, twitch_vod_id
 from qclip.utils.audio import find_offset
 
 
@@ -87,3 +87,10 @@ def test_find_offset_recovers_shift() -> None:
     lag, quality = find_offset(reference, probe)
     assert lag == 8000 * 13 + 1234
     assert quality > 0.99
+
+
+def test_find_output_ignores_derived_files(tmp_path: Path) -> None:
+    for name in ["w_01.clap.npy", "w_01.raw16k.wav", "w_01.mp4.part", "w_01.info.json", "w_01.mp4", "w_011.mp4"]:
+        (tmp_path / name).write_bytes(b"")
+    assert find_output(tmp_path, "w_01") == tmp_path / "w_01.mp4"
+    assert find_output(tmp_path, "w_02") is None

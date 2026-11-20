@@ -67,9 +67,12 @@ def load_info(url: str, work: Path, force: bool = False) -> dict[str, Any]:
 
 
 def find_output(directory: Path, stem: str) -> Path | None:
-    """Fichier produit par yt-dlp (l'extension dépend de la source)."""
+    """Fichier produit par yt-dlp (l'extension dépend de la source).
+
+    Seulement « <stem>.<ext> » : les fichiers dérivés (w_01.clap.npy, w_01.raw16k.wav…) ne sont pas la vidéo.
+    """
     for path in sorted(directory.glob(f"{stem}.*")):
-        if path.suffix not in {".part", ".ytdl", ".json"}:
+        if path.stem == stem and path.suffix not in {".part", ".ytdl", ".json"}:
             return path
     return None
 

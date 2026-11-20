@@ -122,7 +122,10 @@ class JobQueue:
         def on_info(message: str) -> None:
             update(logs=[*job.logs, message][-MAX_LOGS:])
 
-        return Steps(on_start=on_start, on_done=on_done, on_info=on_info, on_stage=on_stage)
+        def on_video(vid: str) -> None:
+            update(video_id=vid)
+
+        return Steps(on_start=on_start, on_done=on_done, on_info=on_info, on_stage=on_stage, on_video=on_video)
 
     def _run(self) -> None:
         while True:

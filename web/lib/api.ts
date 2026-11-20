@@ -155,3 +155,47 @@ export type Dashboard = {
   recent_clips: PipelineItem[];
   job: Job | null;
 };
+
+export type VodStep = { name: string; seconds: number };
+
+export type VodStage = {
+  key: "repérage" | "téléchargement" | "séparation" | "transcription" | "détection";
+  name: string;
+  state: "done" | "running" | "waiting";
+  seconds?: number; // durée mesurée (absente si l'étape n'a pas encore été chronométrée)
+  steps?: VodStep[]; // sous-étapes du repérage
+  done?: number;
+  total?: number;
+  estimate_s?: number; // temps restant estimé d'après les VOD déjà traitées sur cette machine
+};
+
+export type VodWindow = {
+  rank: number;
+  start: number;
+  end: number;
+  peak: number;
+  state: "waiting" | "fetched" | "audio" | "transcribed";
+};
+
+/** Écran VOD (maquette 3) : qclip/overview.py · vod_overview. */
+export type Vod = {
+  video_id: string;
+  campaign: string;
+  campaign_name: string;
+  creator: string;
+  title: string;
+  url: string;
+  platform: "kick" | "twitch" | "youtube" | null;
+  language: string;
+  duration: number;
+  chat_messages: number;
+  source_rule: string;
+  radar: { chat: number[]; audio: number[] };
+  windows: VodWindow[];
+  stages: VodStage[];
+  candidates: number;
+  ready_windows: number;
+  zones_seconds: number;
+};
+
+export type VodItem = { video_id: string; title: string; campaign: string; duration: number; updated: number };

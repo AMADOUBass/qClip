@@ -404,3 +404,25 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
   - Next 16 : `usePathname`/`useParams` sous un `<Suspense>` (posé dans le layout).
   - Tests e2e ajoutés (`web/e2e/brief.spec.ts`, rien n'est écrit) : erreurs du brief, hashtag vide ignoré,
     glisser l'overlay. La création complète d'une campagne a été vérifiée à la main puis le fichier de test supprimé.
+- **M8 — étape 4 (VOD : radar et traitement), 2026-11-20**
+  - `/vod/<id>` (maquette 3) : pastilles (plateforme, langue, durée, messages, règle de source), **radar du hype**
+    (chat vers le haut, volume vers le bas, zones en jaune numérotées, numéros décalés d'une ligne quand deux zones
+    sont proches), carte « 1 · Repérage » (sous-étapes et temps), carte « 2 · Traitement des zones » (étape en cours :
+    « N/total », barre, temps restant ; suivantes : estimation), carte « Temps restant estimé », grille des zones.
+    Progression en direct par SSE + relecture de l'état disque toutes les 4 s pendant l'analyse.
+  - **Numéro de zone = rang** (#01 = la plus forte), comme partout ailleurs (fichiers `w_01…`, tri, éditeur) ; la
+    maquette numérote dans l'ordre du temps. Les zones sont traitées dans l'ordre des rangs.
+  - **Écart à la maquette** : « Les 9 premiers moments sont déjà prêts » n'existe pas — le pipeline va étape par
+    étape et les moments n'existent qu'après la détection. La carte jaune dit combien de zones sont transcrites et
+    le bouton « Trier » s'active à la fin (ou tout de suite si une analyse précédente a déjà des moments).
+  - `/vod` : l'analyse en cours, sinon la dernière VOD repérée. `/vod/new` (`?campaign=<slug>` depuis le brief) :
+    choix de la campagne, **règle de source à confirmer** avant « Analyser », URL Kick / Twitch / YouTube vérifiée.
+  - Cœur : `Steps.video(id)` annonce la VOD dès le repérage (l'écran s'ouvre aussi pour Kick/YouTube) ; durées des
+    grandes étapes et des zones vraiment traitées dans `work/<id>/timings.json` ; une reprise depuis le cache
+    n'écrase plus les vrais temps (repérage compris). Estimations = médiane des zones mesurées sur cette machine,
+    sinon ordres de grandeur (téléchargement 10 s, extraction 2 s, séparation 160 s, transcription 22 s, détection
+    10 s par zone de 75 s).
+  - **Bug corrigé** (présent depuis M3) : relancer `process` sur une VOD déjà traitée plantait (`find_output` prenait
+    `w_01.clap.npy` pour la vidéo). Ne retient plus que `<stem>.<ext>`.
+  - Validé en réel depuis l'interface : nouvelle VOD → Analyser → écran VOD en direct jusqu'à « 24 moments »
+    (3 zones re-transcrites, transcriptions et candidats identiques à l'original).
