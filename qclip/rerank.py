@@ -6,6 +6,7 @@ textes courts. Le modèle est déchargé à la fin (keep_alive=0) pour rendre la
 
 import contextlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -28,15 +29,24 @@ class Verdict(BaseModel):
 
 
 PROMPT = """Tu es monteur de clips courts (TikTok, Shorts, Reels) pour le streamer {creator}.
-Voici un extrait de {duration:.0f} s d'un live, transcrit automatiquement (la transcription peut contenir des erreurs :
-ne cite pas un passage qui n'a pas de sens).
-Signaux mesurés : {reasons}.
+Voici un extrait de {duration:.0f} s d'un live, transcrit automatiquement. La transcription contient des erreurs :
+un mot qui n'a pas de sens dans la phrase est sûrement mal transcrit, ne le reprends jamais.
+Signaux mesurés pendant le live : {reasons}.
 
 Transcription :
 \"\"\"{text}\"\"\"
 
-Note ce clip pour des inconnus qui scrollent, propose une accroche (8 mots max) et un titre (60 caractères max),
-en français familier comme le streamer, sans inventer ce qui ne se passe pas dans l'extrait. Réponds en JSON."""
+Réponds en JSON :
+- score : potentiel pour des inconnus qui scrollent. 0-3 banal, 4-6 correct, 7-8 très bon, 9-10 exceptionnel (rare).
+  Un passage confus ou qu'on ne comprend pas sans contexte ne dépasse pas 5.
+- hook : accroche affichée à l'écran, 3 à 8 mots, qui donne envie de voir la suite. Aucun gros mot, aucune insulte.
+- title : titre du post, 60 caractères max, commence par « {creator} » ou par une réaction. Jamais « Live : ».
+  N'invente rien qui ne soit pas dans l'extrait. Pas de gros mot.
+- reason : une phrase concrète sur ce qui se passe dans l'extrait.
+- standalone : true seulement si un inconnu comprend l'extrait sans connaître le live.
+
+L'accroche et le titre doivent parler de CE QUI SE PASSE DANS CET EXTRAIT (pas d'un autre clip), avec tes mots :
+ne recopie pas un morceau de transcription confus, résume plutôt la situation ou la réaction."""
 
 
 def key(c: dict[str, Any]) -> str:
@@ -48,11 +58,25 @@ def load_rerank(vid: str) -> dict[str, dict[str, Any]]:
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
+# Gros mots : une accroche ou un titre qui en contient est ignoré (retour au gabarit). Les petits modèles en
+# reprennent volontiers depuis la transcription.
+PROFANITY = re.compile(
+    r"\b(encul\w*|put(e|ain)\w*|connard\w*|connasse|salop\w*|batard\w*|bâtard\w*|nique\w*|ntm|fdp|merde\w*"
+    r"|couilles?|bite|chatte|pd|tg|ta gueule)\b",
+    re.IGNORECASE,
+)
+
+
+def is_clean(text: str) -> bool:
+    return not PROFANITY.search(text)
+
+
 def clean(verdict: Verdict) -> dict[str, Any]:
     hook = " ".join(verdict.hook.strip().strip('"«»').split()[:8])
     title = verdict.title.strip().strip('"')
     title = title if len(title) <= 60 else title[:59].rsplit(" ", 1)[0] + "…"
-    return {**verdict.model_dump(), "hook": hook, "title": title}
+    # Vide = « pas de proposition » : `qclip render` retombe alors sur l'accroche / le titre par gabarit.
+    return {**verdict.model_dump(), "hook": hook if is_clean(hook) else "", "title": title if is_clean(title) else ""}
 
 
 def rerank_candidates(slug: str, vid: str, steps: Steps, top: int | None = None, force: bool = False) -> Path:

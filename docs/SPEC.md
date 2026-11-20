@@ -337,3 +337,10 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     (score 0-10, accroche ≤ 8 mots, titre ≤ 60, raison, `standalone`), top 2×N, résultats dans `work/<id>/rerank.json`
     (clé = passage, survit à un recalcul des candidats), modèle déchargé à la fin (`keep_alive=0`). `qclip render`
     prend alors les N meilleurs selon le LLM et ses accroches / titres.
+  - **Test du rerank (2026-11-20)** avec `qwen3.5:2b-q4_K_M` (1,9 Go, ~22 s par candidat, 8 candidats ≈ 2 min 45) :
+    fonctionne, mais **n'apporte rien par rapport aux gabarits** — notes instables d'un essai à l'autre, accroches
+    vagues ou recopiées de la transcription, recopie des exemples de la consigne (titre d'un autre clip → trompeur).
+    Consigne resserrée (échelle de notes, pas de gros mots, jamais « Live : », pas d'exemple recopiable) : notes plus
+    réalistes (3-7), qualité des textes toujours insuffisante. **`use_llm: false` reste le défaut.**
+    Garde-fou : accroche / titre du LLM contenant un gros mot → ignorés, retour au gabarit (`rerank.PROFANITY`).
+    À retester avec un modèle plus gros (`qwen3.5:4b`, 3,3 Go) si la RAM le permet (8 Go ici, ~2 Go libres).

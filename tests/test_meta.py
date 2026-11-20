@@ -107,3 +107,15 @@ def test_log_post_refusals(campaign: str, monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(posts, "load_campaign", lambda slug: brief(test_only=True))
     with pytest.raises(ConfigError, match="campagne de test"):
         posts.log_post(campaign, "3", "tiktok", "https://x.y/z", None)
+
+
+def test_llm_profanity_falls_back_to_templates() -> None:
+    title = "NoahLunsi : le loup-garou enculé"
+    v = clean(Verdict(score=5, hook="Loup-garou enculé ?", title=title,
+                      reason="x", standalone=True))  # fmt: skip
+    assert v["hook"] == "" and v["title"] == ""
+    ok = clean(Verdict(score=5, hook="Ce que j'ai vu au camp", title="NoahLunsi : Réaction au camp", reason="x",
+                       standalone=True))  # fmt: skip
+    assert ok["hook"] == "Ce que j'ai vu au camp" and ok["title"] == "NoahLunsi : Réaction au camp"
+    assert clean(Verdict(score=5, hook="Il est putain de fort", title="t", reason="x", standalone=True))["hook"] == ""
+    assert clean(Verdict(score=5, hook="Computer power", title="t", reason="x", standalone=True))["hook"] != ""
