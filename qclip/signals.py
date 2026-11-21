@@ -2,6 +2,7 @@
 coupes de scène. Tout est échantillonné sur une grille de STEP secondes, en temps de la VOD."""
 
 import gc
+import math
 import os
 import re
 from pathlib import Path
@@ -114,14 +115,30 @@ class ClapScorer:
         gc.collect()
 
 
-def scene_cuts(video: Path, start: float) -> list[float]:
-    """Coupes de scène (temps VOD) par le filtre scdet de ffmpeg, sur une image réduite à 10 i/s."""
-    result = run(
-        ["ffmpeg", "-hide_banner", "-v", "error", "-skip_loop_filter", "all", "-threads", "4", "-i", video, "-an",
-         "-vf", f"fps=10,scale=320:-2,scdet=threshold={SCENE_THRESHOLD},metadata=print:file=-", "-f", "null", "-"],
-        timeout=900,
-    )  # fmt: skip
-    if result.returncode != 0:
-        raise RuntimeError(f"détection des coupes impossible sur {video.name} : {last_line(result.stderr)}")
-    found = re.findall(r"lavfi\.scd\.time=([\d.]+)", result.stdout + result.stderr)
-    return sorted(round(start + float(t), 2) for t in found)
+AROUND_S = 1.5  # demi-largeur des extraits analysés autour d'une borne (> CUT_SNAP de score.py)
+
+
+def scene_cuts(video: Path, start: float, around: list[float] | None = None) -> list[float]:
+    """Coupes de scène (temps VOD) par le filtre scdet de ffmpeg, sur une image réduite à 10 i/s.
+
+    `around` (temps VOD) : n'analyser que ± AROUND_S autour de ces instants. Les coupes ne servent qu'à caler une borne
+    à moins d'une seconde (score.snap_to_cuts) : 2 extraits de 3 s au lieu de toute la plage (≈ 8 x plus rapide, M7).
+    """
+    # Début des extraits sur la grille de 0,1 s du fichier : mêmes images échantillonnées (fps=10) qu'une analyse
+    # de toute la plage, donc mêmes instants de coupe.
+    spans = [(None, None)] if around is None else [
+        (max(0.0, math.floor((t - start - AROUND_S) * 10) / 10), 2 * AROUND_S) for t in around]  # fmt: skip
+    found: set[float] = set()
+    for offset, length in spans:
+        seek = [] if offset is None else ["-ss", f"{offset:.3f}", "-t", f"{length:.3f}"]
+        result = run(
+            ["ffmpeg", "-hide_banner", "-v", "error", *seek, "-skip_loop_filter", "all", "-threads", "4", "-i", video,
+             "-an", "-vf", f"fps=10,scale=320:-2,scdet=threshold={SCENE_THRESHOLD},metadata=print:file=-",
+             "-f", "null", "-"],
+            timeout=900,
+        )  # fmt: skip
+        if result.returncode != 0:
+            raise RuntimeError(f"détection des coupes impossible sur {video.name} : {last_line(result.stderr)}")
+        found |= {round(start + (offset or 0.0) + float(t), 2)
+                  for t in re.findall(r"lavfi\.scd\.time=([\d.]+)", result.stdout + result.stderr)}  # fmt: skip
+    return sorted(found)

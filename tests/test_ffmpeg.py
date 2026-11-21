@@ -1,4 +1,6 @@
 import json
+import shutil
+from pathlib import Path
 
 import pytest
 
@@ -43,3 +45,22 @@ def test_parse_ffprobe_audio_only() -> None:
 )
 def test_parse_fps(rate: str, expected: float) -> None:
     assert parse_fps(rate) == pytest.approx(expected, abs=0.01)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg absent")
+def test_scene_cuts_around_bounds_match_full_scan(tmp_path: Path) -> None:
+    """M7 : chercher les coupes seulement autour des bornes donne les mêmes coupes que l'analyse de toute la plage."""
+    from qclip.signals import scene_cuts
+    from qclip.utils.ffmpeg import run
+
+    video = tmp_path / "plage.mp4"
+    # 8 s : gris foncé jusqu'à 2,93 s, puis blanc (coupe franche), puis rouge à 6,47 s
+    result = run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x202020:s=320x180:r=30:d=2.93",
+                  "-f", "lavfi", "-i", "color=c=white:s=320x180:r=30:d=3.54", "-f", "lavfi", "-i",
+                  "color=c=red:s=320x180:r=30:d=1.53", "-filter_complex", "[0][1][2]concat=n=3:v=1[v]",
+                  "-map", "[v]", "-c:v", "libx264", "-g", "60", video])  # fmt: skip
+    assert result.returncode == 0, result.stderr
+    full = scene_cuts(video, 1000.0)
+    assert len(full) == 2
+    assert scene_cuts(video, 1000.0, around=[1003.2, 1006.0]) == full
+    assert scene_cuts(video, 1000.0, around=[1004.7]) == []  # extrait 3,2-6,2 s : aucune coupe dedans

@@ -192,7 +192,7 @@ subtitle: { font: "Montserrat ExtraBold", size: 90, color: "#FFFFFF", highlight:
 - **M4** : render `facecam` + `blur` + sous-titres + loudnorm (QSV). ✔ = `/verify-clip` OK, sous-titres à ±150 ms.
 - **M5** : meta (gabarits) + caption.txt + miniature + `posts.csv` / `log` / `stats` ; rerank LLM en option.
 - **M6** : safety + `crop` + lot + variations anti-doublon.
-- **M7** : perf : objectif < 30 min de calcul pour une VOD de 4 h avec chat, sur cette machine.
+- **M7** : perf : objectif < 30 min de calcul pour une VOD de 4 h avec chat, sur cette machine. ✔ 2026-11-21 (21,1 min réseau compris).
 - **M8** : interface de revue (§7), seulement après validation de M4. ✔ 2026-11-21 (étapes 1 à 7).
 
 ## 9. Hors périmètre (pour l'instant)
@@ -475,3 +475,31 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
   - Parcours sans terminal (une fois `qclip serve` et `pnpm dev` lancés), validé étape par étape sur la VOD de test :
     brief (étape 3) → nouvelle VOD + analyse en direct (4) → tri au clavier (5) → éditeur + rendu, `/verify-clip` OK (6)
     → pipeline (7). Seul l'enregistrement d'un vrai post n'a pas été fait : il n'existe encore aucune campagne réelle.
+- **M7, 2026-11-21** — mesure complète (tout refait, `--force`) sur la VOD de test : 3 h 59, 5 078 messages de chat,
+  24 zones, rendu des 8 meilleurs clips. i7-8550U 4 cœurs, sur secteur. **21,1 min de bout en bout, réseau compris
+  (≈ 4 min) → ≈ 17 min de calcul. Objectif < 30 min atteint.**
+
+  | Étape | Temps | Détail |
+  |---|---|---|
+  | Repérage | 2 min 39 | audio 4 h (réseau) 1 min 55, chat 11 s, volume RMS 28 s, fenêtres 0,3 s |
+  | Téléchargement des zones | 2 min 09 | ≈ 5 s / zone (réseau), recalage audio compris |
+  | Extraction de l'audio | 16 s | ≈ 0,6 s / zone |
+  | Transcription (Parakeet) | 9 min 14 | chargement 5 s, 12-30 s / zone (médiane ≈ 23 s) |
+  | Détection des moments | 4 min 07 | CLAP 3 min 38 (dont chargement 34 s), coupes 28 s |
+  | Rendu de 8 clips + meta | 2 min 45 | 10-19 s d'encodage QSV + 4-6 s de meta par clip |
+
+  - **Coupes de scène cherchées seulement autour des bornes** (±1,5 s, 2 extraits de 3 s par zone) au lieu de toute
+    la zone : elles ne servent qu'à caler une borne à moins de 1 s (`snap_to_cuts`). Le passage est choisi sans coupes,
+    puis rechoisi avec celles trouvées près de ses bornes (bornes avant calage identiques → même résultat). Extraits
+    alignés sur la grille de 0,1 s du fichier : mêmes images échantillonnées, donc mêmes instants de coupe.
+    11,2 s → 1,2 s par zone, **≈ 4 min 30 → 28 s** sur la VOD. Vérifié : 24 candidats identiques (numéros, bornes,
+    scores, raisons, texte) ; test pytest sur une vidéo générée avec coupes franches.
+  - **Transcription laissée telle quelle** (mesuré sur une zone) : onnxruntime prend déjà 4 threads (8 threads :
+    +50 % de temps, l'hyperthreading gêne) ; `batch_size` 4 de la VAD : −10 à −17 %, **mais change le texte**
+    (remplissage des lots) → qualité et clés des corrections de l'éditeur (début de chaque mot) en jeu : refusé.
+  - Résultats de la mesure identiques à avant : 24/24 transcriptions, 24 candidats, fenêtres du repérage. Les 8 rendus :
+    1080x1920, 30 i/s, 27,5-38,4 s, AAC, −13,8 à −14,8 LUFS.
+  - `work/<id>/timings.json` contient maintenant ces mesures (par étape et par zone) : l'écran VOD s'en sert pour
+    estimer le temps restant des prochaines analyses.
+  - Pistes restantes si besoin (non faites, l'objectif est atteint) : télécharger la zone suivante pendant qu'on
+    transcrit la précédente (≈ 2 min de réseau masquées) ; garder CLAP chargé entre deux VOD (34 s).
