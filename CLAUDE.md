@@ -12,6 +12,7 @@ le lire avant chaque jalon, et le mettre à jour quand une décision change.
 - Types : `uvx ty check` (ty est en beta : signaler un faux positif évident au lieu de le contourner)
 - Tests : `uv run pytest -q` — un seul fichier : `uv run pytest tests/test_score.py -q`
 - Interface (M8) : API `uv run qclip serve` (127.0.0.1:8765) + front `cd web && pnpm dev` (http://localhost:3000)
+  - Sans terminal : double-clic sur `lancer-qclip.cmd` (lance ce qui ne tourne pas déjà, puis ouvre le navigateur)
   - Front : `pnpm exec tsc --noEmit`, `pnpm lint`, `pnpm exec playwright test` (API et front lancés)
 - Vidéo de test : `input/sample.mp4` (5 min d'une VOD de campagne). Toujours valider dessus avant une longue VOD.
 - Aucun téléchargement ni traitement de contenu qui n'est pas rattaché à une campagne (`campaigns/<slug>.yaml`).
