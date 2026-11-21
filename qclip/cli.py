@@ -14,7 +14,7 @@ from yt_dlp.utils import DownloadError
 
 from qclip import ROOT
 from qclip import doctor as doctor_mod
-from qclip.bench import SEP_MODELS, AsrResult, bench_asr, bench_sep
+from qclip.bench import SEP_MODELS, AsrResult, bench_asr, bench_sep, bench_vision
 from qclip.campaign import load_brief, load_campaign, new_campaign
 from qclip.candidates import build_candidates
 from qclip.config import ConfigError, cpu_threads, load_config
@@ -292,6 +292,44 @@ def bench_sep_cmd(
     console.print(bench_table(f"bench-sep — {audio.name}", results, "audio brut"))
     for r in results:
         console.print(f"\n[bold]{r.name}[/] : {r.text}", soft_wrap=True)
+
+
+@app.command("bench-vision")
+def bench_vision_cmd(
+    clip: Annotated[Path, typer.Argument(help="Clip rendu (ex. output/<campagne>/<vid>/clip_1.mp4)")],
+    models: Annotated[
+        str, typer.Option(help="Modèles Ollama vision séparés par des virgules")
+    ] = "qwen3.5:2b-q4_K_M,qwen3.5:4b-q4_K_M",
+    thumbnail: Annotated[Path | None, typer.Option(help="Miniature JPEG (optionnel)")] = None,
+) -> None:
+    """Compare des modèles vision Ollama sur les 7 premières secondes d'un clip : temps et verdict de démonétisation."""
+    try:
+        names = [m.strip() for m in models.split(",") if m.strip()]
+        results = bench_vision(clip, names, thumbnail)
+    except USER_ERRORS as e:
+        raise fail(e) from e
+    table = Table(title=f"bench-vision — {clip.name}")
+    for col, just in [
+        ("Modèle", "left"),
+        ("Violent", "left"),
+        ("Gore", "left"),
+        ("Signalé", "left"),
+        ("Confiance", "right"),
+        ("Temps", "right"),
+        ("Description", "left"),
+    ]:
+        table.add_column(col, justify=just)
+    for r in results:
+        table.add_row(
+            r.model,
+            "⚠️ " if r.graphic_violence else "✅",
+            "⚠️ " if r.gore else "✅",
+            "[red]OUI[/]" if r.flagged else "[green]non[/]",
+            f"{r.confidence:.2f}",
+            f"{r.seconds:.1f} s",
+            r.description,
+        )
+    console.print(table)
 
 
 @app.command()

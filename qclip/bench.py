@@ -1,4 +1,4 @@
-"""`bench-asr` et `bench-sep` : comparer les backends sur un même extrait, temps mesurés (SPEC §5, jalon M2)."""
+"""`bench-asr`, `bench-sep` et `bench-vision` : comparer les backends sur un même extrait (SPEC §5, jalon M2)."""
 
 import gc
 import json
@@ -112,3 +112,40 @@ def bench_sep(audio: Path, models: list[str], steps: Steps, threads: int = 4) ->
 def save(path: Path, results: list[AsrResult]) -> None:
     data = [{**asdict(r), "rtf": round(r.rtf, 3)} for r in results]
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@dataclass
+class VisionResult:
+    model: str
+    graphic_violence: bool
+    gore: bool
+    violent_frames: list[int]
+    flagged: bool
+    confidence: float
+    description: str
+    seconds: float
+
+
+def bench_vision(clip: Path, models: list[str], thumbnail: Path | None = None) -> list[VisionResult]:
+    """Chaque modèle vision analyse les 7 premières secondes du clip et retourne son verdict de démonétisation."""
+    from qclip.vision import check_images
+
+    results: list[VisionResult] = []
+    for model in models:
+        verdict = check_images(clip, thumbnail, model)
+        results.append(
+            VisionResult(
+                model=verdict["model"],
+                graphic_violence=verdict["graphic_violence"],
+                gore=verdict["gore"],
+                violent_frames=verdict["violent_frames"],
+                flagged=verdict["flagged"],
+                confidence=verdict["confidence"],
+                description=verdict["description"],
+                seconds=verdict["seconds"],
+            )
+        )
+    out = clip.parent / "bench" / f"{clip.stem}.bench-vision.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps([asdict(r) for r in results], ensure_ascii=False, indent=2), encoding="utf-8")
+    return results
