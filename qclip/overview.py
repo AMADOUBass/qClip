@@ -471,7 +471,10 @@ def pipeline(slug: str | None = None) -> dict[str, Any]:
                 if status == "poste":
                     pending += est
                 caption_path = meta_path.with_suffix(".caption.txt")
+                render_info = read_json(meta_path.with_suffix(".render.json"), {})
                 items.append({
+                    "window": (render_info.get("candidate") or {}).get("window"),  # pour ouvrir l'éditeur
+                    "submit_within_min": brief.requirements.submit_within_min,
                     "campaign": s, "campaign_name": brief.name, "creator": brief.creator, "video_id": vid,
                     "clip_id": int(cid), "title": post.get("title", ""), "hook": post.get("hook", ""),
                     "duration": post.get("duration"), "status": status, "compliance": post.get("compliance"),

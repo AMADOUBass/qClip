@@ -82,25 +82,37 @@ export type CampaignSummary = {
   vods: string[];
 };
 
+export type ClipPost = { url: string; views: number; paid: number };
+
+export type ComplianceCheck = { name: string; ok: boolean; detail: string };
+
 export type PipelineItem = {
   campaign: string;
   campaign_name: string;
   creator: string;
   video_id: string;
   clip_id: number;
+  window: number | null; // plage du moment (lien vers l'éditeur)
   title: string;
   hook: string;
   duration: number | null;
   status: "a_revoir" | "rendu" | "poste" | "paye";
+  compliance: { ok: boolean; checks: ComplianceCheck[] } | null;
   caption: string;
   thumbnail: string;
   video: string;
+  posts: Partial<Record<"tiktok" | "shorts" | "reels", ClipPost>>;
+  platforms: ("tiktok" | "shorts" | "reels")[];
   views: number;
   estimate: number;
   paid: number;
+  under_min: boolean;
+  submit_within_min: number | null;
   rendered_at: string;
   test_only: boolean;
 };
+
+export type Pipeline = { items: PipelineItem[]; paid_week: number; pending: number };
 
 /** Brief de campagne tel que renvoyé par l'API (mêmes champs que qclip/campaign.py). */
 export type Brief = {

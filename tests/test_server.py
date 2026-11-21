@@ -134,3 +134,12 @@ def test_subtitle_font_is_served_for_the_editor_preview(client: TestClient) -> N
     r = client.get("/media/assets/fonts/Montserrat-ExtraBold.ttf")
     assert r.status_code == 200 and len(r.content) > 100_000
     assert client.get("/media/assets/fonts/../../pyproject.toml").status_code == 404
+
+
+def test_clip_status_follows_posts_and_payments() -> None:
+    ok, ko = {"compliance": {"ok": True}}, {"compliance": {"ok": False}}
+    row = {"post_url": "", "paid": ""}
+    assert overview.clip_status(ko, [row]) == "a_revoir"
+    assert overview.clip_status(ok, [row]) == "rendu"
+    assert overview.clip_status(ok, [{**row, "post_url": "https://www.tiktok.com/@moi/video/1"}]) == "poste"
+    assert overview.clip_status(ok, [{"post_url": "https://x.y/z", "paid": "7.20"}]) == "paye"

@@ -193,7 +193,7 @@ subtitle: { font: "Montserrat ExtraBold", size: 90, color: "#FFFFFF", highlight:
 - **M5** : meta (gabarits) + caption.txt + miniature + `posts.csv` / `log` / `stats` ; rerank LLM en option.
 - **M6** : safety + `crop` + lot + variations anti-doublon.
 - **M7** : perf : objectif < 30 min de calcul pour une VOD de 4 h avec chat, sur cette machine.
-- **M8** : interface de revue (§7), seulement après validation de M4.
+- **M8** : interface de revue (§7), seulement après validation de M4. ✔ 2026-11-21 (étapes 1 à 7).
 
 ## 9. Hors périmètre (pour l'instant)
 Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus tard si besoin : un mode « GPU loué » pour les gros volumes.
@@ -459,3 +459,19 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     gardée, sur toute la plage). Mots peu sûrs (confiance < 0,5) soulignés et listés.
   - « Variation anti-doublon » et « Recadrage » grisés (M6). Si la facecam n'a pas de sens (caméra plein cadre,
     aucune webcam), l'écran le dit et l'aperçu montre le repli en Flou, comme le rendu.
+- **M8 — étape 7 (pipeline, parcours complet), 2026-11-21**
+  - `/pipeline` (maquette 6) : colonnes À revoir / Rendu / Posté, puis Payé en pleine largeur ; filtre par campagne ;
+    totaux « payé cette semaine » et « en attente » (estimations des clips postés).
+  - Carte : miniature (ouvre le clip), titre (ouvre l'éditeur sur ce moment), créateur · durée, verdict du brief et
+    pastilles Overlay / #tag / Durée / Mention / Titre (✕ en rose si non respecté).
+    - À revoir : ce qui bloque et **où le corriger** (overlay → brief, durée → éditeur…). Campagne de test :
+      « ne doit pas être posté » (le cœur refuse de toute façon d'enregistrer un post pour une campagne de test).
+    - Rendu : « Copier la légende », puis **URL du post par plateforme du brief** → `POST /api/clips/…/log` → Posté.
+    - Posté : vues, estimation (ou « sous le minimum »), rappel de soumettre le lien sur Content Rewards si le brief
+      fixe un délai ; saisie des vues et du montant payé par plateforme → Payé.
+  - « Démonétisation » (maquette) = safety de M6 : pas affiché tant qu'il n'existe pas.
+  - Tests : le parcours posté → payé est testé **avec une API simulée** (Playwright `page.route`) pour ne jamais écrire
+    dans posts.csv ; la logique d'écriture et de calcul reste couverte par pytest (log_post, estimate, budget, statuts).
+  - Parcours sans terminal (une fois `qclip serve` et `pnpm dev` lancés), validé étape par étape sur la VOD de test :
+    brief (étape 3) → nouvelle VOD + analyse en direct (4) → tri au clavier (5) → éditeur + rendu, `/verify-clip` OK (6)
+    → pipeline (7). Seul l'enregistrement d'un vrai post n'a pas été fait : il n'existe encore aucune campagne réelle.
