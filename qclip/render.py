@@ -336,13 +336,33 @@ def render_candidates(
     return results
 
 
-def clip_safety(vid: str, c: dict[str, Any], words: list[dict[str, Any]], labels: list[str], min_len: float) -> dict:
-    """Verdict démonétisation du passage (safety.py) : gros mots et sons violents dans les 7 premières secondes."""
+def clip_safety(
+    vid: str,
+    c: dict[str, Any],
+    words: list[dict[str, Any]],
+    labels: list[str],
+    min_len: float,
+    clip: Path | None = None,
+    thumbnail: Path | None = None,
+    vision_model: str | None = None,
+) -> dict:
+    """Verdict démonétisation : gros mots et sons violents dans les 7 premières secondes, + images si vision activée."""
     from qclip.safety import check, window_events
     from qclip.sources import WORK_DIR
 
     found = window_events(WORK_DIR / vid / "windows", c["window"], words, labels)
-    return check(c["start"], c["end"], found, min_len)
+    verdict = check(c["start"], c["end"], found, min_len)
+    if clip is not None and vision_model:
+        from qclip.vision import check_images
+
+        try:
+            vision = check_images(clip, thumbnail, vision_model)
+            verdict["vision"] = vision
+            if vision["flagged"]:
+                verdict["ok"] = False
+        except RuntimeError as e:
+            verdict["vision"] = {"error": str(e)}
+    return verdict
 
 
 def write_meta(
@@ -392,7 +412,16 @@ def write_meta(
         "llm": llm or None,
         "test_only": brief.test_only,
         "compliance": compliance(brief, duration, caption, title, render_info.get("overlay", False)),
-        "safety": clip_safety(vid, c, words, config.audio_event_labels, brief.clip.min_len),
+        "safety": clip_safety(
+            vid,
+            c,
+            words,
+            config.audio_event_labels,
+            brief.clip.min_len,
+            clip=clip if config.llm.use_vision else None,
+            thumbnail=thumb if config.llm.use_vision else None,
+            vision_model=config.llm.vision_model if config.llm.use_vision else None,
+        ),
     }
     clip.with_suffix(".safety.json").write_text(json.dumps(post["safety"], ensure_ascii=False, indent=2), "utf-8")
     clip.with_suffix(".caption.txt").write_text(caption, encoding="utf-8")

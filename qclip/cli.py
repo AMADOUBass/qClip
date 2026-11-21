@@ -453,8 +453,17 @@ def safety(
                     continue
                 raw = json.loads(transcript_path(WORK_DIR / vid / "windows", c["window"]).read_text("utf-8"))["words"]
                 words = corrected(raw, edits.get(c["window"], {}).get("corrections", {}))
-                verdict = clip_safety(vid, c, words, config.audio_event_labels, brief.clip.min_len)
                 clip = out_dir / f"clip_{c['id']}.mp4"
+                verdict = clip_safety(
+                    vid,
+                    c,
+                    words,
+                    config.audio_event_labels,
+                    brief.clip.min_len,
+                    clip=clip if config.llm.use_vision else None,
+                    thumbnail=clip.with_suffix(".jpg") if config.llm.use_vision else None,
+                    vision_model=config.llm.vision_model if config.llm.use_vision else None,
+                )
                 clip.with_suffix(".safety.json").write_text(json.dumps(verdict, ensure_ascii=False, indent=2), "utf-8")
                 post_path = clip.with_suffix(".json")
                 if post_path.exists():  # le pipeline lit le verdict dans clip_<n>.json
