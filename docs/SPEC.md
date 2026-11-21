@@ -440,3 +440,22 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     320 px, en cache `w_XX.frame.jpg`), l'accroche (rerank) ou les premiers mots.
   - « Rendre les N moments gardés » (dès qu'il y en a un) et **Ctrl R** (palette → `?render=kept`, confirmation
     avant de lancer) → `POST /api/vods/<id>/render {kept: true}`.
+- **M8 — étape 6 (éditeur de clip), 2026-11-21**
+  - `/editor?vod=<id>&w=<plage>` (maquette 5) : transcription cliquable, aperçu 9:16 en direct, layout, style des
+    sous-titres, accroche, « Rendre le clip », ligne de temps ; navigation entre les clips **gardés** (sinon tous).
+  - **Aperçu sans Remotion** : la vidéo de la plage est dessinée sur un canvas (540 x 960) avec les mêmes découpes
+    que les filtres ffmpeg (blur : fond 9:16 flou + image 16:9 centrée ; facecam : webcam 1080 x 640 en haut, bande
+    centrale du jeu en bas) ; texte en HTML aux positions du rendu. Plus simple, aucune dépendance, et l'aperçu
+    réutilise le **layout réellement rendu** : l'API (`overview.editor` → `preview`) appelle `choose_layout`,
+    donne les positions (`subs_y`, `hook_y`, zone sûre, marges), l'accroche effective (éditeur > rerank > citation
+    automatique), le bandeau de test et la conformité au brief (mêmes vérifications que `write_meta`).
+  - Sous-titres : découpage en lignes et temps portés en TypeScript à l'identique de `subtitles.py` (group_lines,
+    HOLD, LINE_GAP). Police Montserrat ExtraBold servie par l'API (`/media/assets/fonts/…`), taille CSS = taille ASS
+    × 0,65 (mesuré : même largeur de texte que libass sur un vrai rendu).
+  - **Validé contre un vrai rendu** : aperçu et `clip_1.mp4` comparés à 1,5 s et 6 s (même image, même mot surligné,
+    mêmes positions, largeurs de texte à ±1 %) ; puis rendu lancé depuis l'éditeur avec style « box », accroche et
+    corrections → `/verify-clip` OK (1080x1920, 30 fps, −14,0 LUFS, synchro 52 ms).
+  - Corrections : « Ce mot » (clé = début du mot) ou « Partout (N) » (mot nu, ponctuation de chaque occurrence
+    gardée, sur toute la plage). Mots peu sûrs (confiance < 0,5) soulignés et listés.
+  - « Variation anti-doublon » et « Recadrage » grisés (M6). Si la facecam n'a pas de sens (caméra plein cadre,
+    aucune webcam), l'écran le dit et l'aperçu montre le repli en Flou, comme le rendu.

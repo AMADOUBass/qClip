@@ -128,3 +128,9 @@ def test_vod_list(client: TestClient) -> None:
 def test_moment_frame_needs_known_vod(client: TestClient) -> None:
     assert client.get("/api/vods/inconnue/moments/1/frame").status_code == 404
     assert client.get("/api/vods/..%2Fqclip/moments/1/frame").status_code == 404
+
+
+def test_subtitle_font_is_served_for_the_editor_preview(client: TestClient) -> None:
+    r = client.get("/media/assets/fonts/Montserrat-ExtraBold.ttf")
+    assert r.status_code == 200 and len(r.content) > 100_000
+    assert client.get("/media/assets/fonts/../../pyproject.toml").status_code == 404

@@ -16,10 +16,14 @@ from qclip import ROOT
 from qclip.campaign import ASSETS_DIR, Brief, campaign_slugs, load_campaign
 from qclip.config import load_config
 from qclip.edits import apply_edit, corrected, load_edits
+from qclip.meta import best_quote, compliance, make_caption, make_hashtags, make_hook, make_title
 from qclip.posts import campaign_stats, estimate, read_posts
+from qclip.render import FG_H, TOP_H, WATERMARK, choose_layout
 from qclip.rerank import key as rerank_key
 from qclip.rerank import load_rerank
 from qclip.sources import WORK_DIR
+from qclip.subtitles import HOLD, HOOK_SECONDS, LINE_GAP, MARGIN_L, MARGIN_R, SAFE_BOTTOM
+from qclip.utils.ffmpeg import ffprobe
 
 RADAR_BINS = 480
 PEAK_POINTS = 600
@@ -348,15 +352,15 @@ def editor(vid: str, window: int) -> dict[str, Any]:
     transcript = read_json(work / "windows" / f"w_{window:02d}.transcript.json", {"words": []})
     words = corrected(transcript["words"], edit.get("corrections", {}))
     inside = [w for w in words if m["start"] <= w["start"] and w["end"] <= m["end"]]
+    probe = ffprobe(ROOT / m["video"])
+    wanted = edit.get("layout") or brief.layout
     facecam = None
-    if (edit.get("layout") or brief.layout) == "facecam":
+    if wanted == "facecam":
         if brief.facecam:
             facecam = Facecam("overlay", None, brief.facecam, "brief")
         else:  # même détection (et même cache) que le rendu : l'aperçu montre ce que le rendu fera
             from qclip.facecam import detect_for_clip
-            from qclip.utils.ffmpeg import ffprobe
 
-            probe = ffprobe(ROOT / m["video"])
             file_start = m["start"] - m["window_start"]
             cache = work / "facecam" / f"w{window:02d}_{m['start']:.1f}.json"
             facecam = detect_for_clip(ROOT / m["video"], file_start, m["duration"], probe.width, probe.height, cache)
@@ -364,6 +368,13 @@ def editor(vid: str, window: int) -> dict[str, Any]:
     if brief.overlay:
         image = ASSETS_DIR / scout["campaign"] / brief.overlay.file
         overlay = {**brief.overlay.model_dump(), "url": rel(image) if image.exists() else None}
+    # Mêmes choix que render_candidates / render_clip : l'aperçu montre ce que le rendu fera.
+    layout, layout_note = choose_layout(wanted, facecam, config.render.fps, probe.width, probe.height)
+    # m["hook"] = accroche de l'éditeur ou du rerank ; m["title"] = titre du rerank (déjà filtrés, voir moments()).
+    hook = m["hook"] or make_hook(inside, m["start"], config.keywords)
+    title = m["title"] or make_title(brief.creator, best_quote(inside, m["start"], config.keywords, 10), m["reasons"])
+    caption = make_caption(title, brief, make_hashtags(brief))
+    check = compliance(brief, m["duration"], caption, title, overlay is not None and overlay["url"] is not None)
     return {
         **m,
         "campaign": scout["campaign"],
@@ -378,16 +389,43 @@ def editor(vid: str, window: int) -> dict[str, Any]:
             }
             for w in inside
         ],  # fmt: skip
-        "layout": edit.get("layout") or brief.layout,
+        "layout": wanted,
         "style": edit.get("style") or config.subtitle.style,
         "subtitle": config.subtitle.model_dump(),
         "facecam": facecam.__dict__ if facecam else None,
-        "source_size": [1920, 1080],
+        "source_size": [probe.width, probe.height],
         "overlay": overlay,
         "mention": brief.required.mention,
         "test_only": brief.test_only,
+        "hook": hook,
+        "hook_auto": not m["hook"],  # accroche tirée d'une citation du clip, pas choisie
+        "title": title,
+        "compliance": check,
+        "min_len": brief.clip.min_len,
+        "max_len": brief.clip.max_len,
+        "preview": {
+            "layout": layout.name,  # layout réellement rendu (repli sur blur si la facecam n'a pas de sens)
+            "note": layout_note,
+            "subs_y": layout.subs_y,
+            "hook_y": layout.hook_y,
+            "top_h": TOP_H,
+            "fg_h": FG_H,
+            "safe_bottom": SAFE_BOTTOM,
+            "margins": [MARGIN_L, MARGIN_R],
+            "hook_seconds": HOOK_SECONDS,
+            "line_gap": LINE_GAP,
+            "hold": HOLD,
+            "watermark": WATERMARK if brief.test_only else "",
+        },
         "render_estimate_s": round(m["duration"] * 0.7),  # ≈ 20 s de calcul pour un clip de 30 s (M4)
+        "rendered": rendered_clip(scout["campaign"], vid, m["id"], brief.test_only),
     }
+
+
+def rendered_clip(slug: str, vid: str, clip_id: int, test_only: bool) -> str | None:
+    """Clip déjà rendu pour ce moment (chemin servi sous /media/), sinon None."""
+    out = (WORK_DIR / vid / "renders" if test_only else ROOT / "output" / slug / vid) / f"clip_{clip_id}.mp4"
+    return rel(out) if out.exists() else None
 
 
 # --- pipeline (écran 6) -----------------------------------------------------------------------------

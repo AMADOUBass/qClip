@@ -25,7 +25,7 @@ from qclip.jobs import JobQueue
 from qclip.posts import log_post
 from qclip.sources import WORK_DIR, twitch_vod_id
 
-MEDIA_ROOTS = [ROOT / "work", ROOT / "output", ASSETS_DIR]
+MEDIA_ROOTS = [ROOT / "work", ROOT / "output", ASSETS_DIR, ROOT / "assets" / "fonts"]  # polices : aperçu de l'éditeur
 VID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 

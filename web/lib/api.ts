@@ -235,3 +235,41 @@ export type Moments = {
 };
 
 export type Peaks = { duration: number; peaks: number[] };
+
+export type EditorWord = { text: string; start: number; end: number; vod_start: number; confidence: number | null; unsure: boolean };
+
+export type SubtitleStyle = "neon" | "box" | "outline" | "karaoke";
+
+/** Éditeur (qclip/overview.py · editor) : le moment + ce que le rendu fera (layout réel, accroche, positions). */
+export type EditorData = Moment & {
+  campaign: string;
+  words: EditorWord[]; // temps relatifs au début du clip, corrections appliquées
+  layout: "facecam" | "blur" | "crop"; // layout demandé
+  style: SubtitleStyle;
+  subtitle: { font: string; size: number; color: string; highlight: string; outline: number; words_per_line: number; uppercase: boolean };
+  facecam: { mode: string; face: number[] | null; rect: number[] | null; source: string } | null;
+  source_size: [number, number];
+  overlay: { file: string; x: number; y: number; width: number; url: string | null } | null;
+  mention: string;
+  test_only: boolean;
+  hook_auto: boolean;
+  compliance: { ok: boolean; checks: { name: string; ok: boolean; detail: string }[] };
+  min_len: number;
+  max_len: number;
+  preview: {
+    layout: "facecam" | "blur"; // layout réellement rendu
+    note: string | null;
+    subs_y: number;
+    hook_y: number;
+    top_h: number;
+    fg_h: number;
+    safe_bottom: number;
+    margins: [number, number];
+    hook_seconds: number;
+    line_gap: number;
+    hold: number;
+    watermark: string;
+  };
+  render_estimate_s: number;
+  rendered: string | null;
+};
