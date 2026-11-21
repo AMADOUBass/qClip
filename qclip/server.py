@@ -135,6 +135,10 @@ def create_app(queue: JobQueue | None = None) -> FastAPI:
     def peaks(vid: str, window: int) -> dict[str, Any]:
         return overview.peaks(check_vid(vid), window)
 
+    @app.get("/api/vods/{vid}/moments/{window}/frame")
+    def frame(vid: str, window: int) -> FileResponse:
+        return FileResponse(overview.frame(check_vid(vid), window), media_type="image/jpeg")
+
     @app.get("/api/vods/{vid}/moments/{window}/editor")
     def editor(vid: str, window: int) -> dict[str, Any]:
         return overview.editor(check_vid(vid), window)

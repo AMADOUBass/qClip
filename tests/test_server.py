@@ -123,3 +123,8 @@ def test_vod_list(client: TestClient) -> None:
     vods = client.get("/api/vods").json()
     assert isinstance(vods, list)
     assert all({"video_id", "title", "campaign"} <= set(v) for v in vods)
+
+
+def test_moment_frame_needs_known_vod(client: TestClient) -> None:
+    assert client.get("/api/vods/inconnue/moments/1/frame").status_code == 404
+    assert client.get("/api/vods/..%2Fqclip/moments/1/frame").status_code == 404

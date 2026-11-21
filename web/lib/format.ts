@@ -45,3 +45,13 @@ export const hm = (seconds: number) => {
   const m = Math.round(seconds / 60);
   return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `${m} min`;
 };
+
+/** Horodatage dans la VOD façon maquette : « 02:14:07 ». */
+export const stamp = (seconds: number) => {
+  const s = Math.max(0, Math.floor(seconds));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+};
+
+/** Score sur 10 à la française : « 7,1 ». */
+export const score10 = (value: number) => value.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });

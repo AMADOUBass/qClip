@@ -285,8 +285,14 @@ def moments(vid: str) -> dict[str, Any]:
     items.sort(key=lambda m: m["score"], reverse=True)
     kept = sum(1 for m in items if m["decision"] == "keep")
     rejected = sum(1 for m in items if m["decision"] == "reject")
+    scout = read_json(work / "scout.json", {})
+    brief = load_campaign(scout["campaign"]) if scout else None
     return {"video_id": vid, "moments": items, "kept": kept, "rejected": rejected,
-            "remaining": len(items) - kept - rejected}  # fmt: skip
+            "remaining": len(items) - kept - rejected,
+            "title": scout.get("title") or vid, "campaign": scout.get("campaign"),
+            "campaign_name": brief.name if brief else "",
+            "min_len": brief.clip.min_len if brief else 15.0,
+            "max_len": brief.clip.max_len if brief else 59.0}  # fmt: skip
 
 
 def peaks(vid: str, window: int) -> dict[str, Any]:
@@ -303,6 +309,25 @@ def peaks(vid: str, window: int) -> dict[str, Any]:
     env = env / max(float(env.max()), 1e-6)
     out = {"duration": len(audio) / sr, "peaks": [round(float(v), 3) for v in env]}
     cache.write_text(json.dumps(out), encoding="utf-8")
+    return out
+
+
+def frame(vid: str, window: int) -> Path:
+    """Petite image du moment (au pic) pour la liste « Ensuite » du tri, en cache à côté de la plage."""
+    from qclip.utils.ffmpeg import last_line, run
+
+    wdir = WORK_DIR / vid / "windows"
+    out = wdir / f"w_{window:02d}.frame.jpg"
+    if out.exists():
+        return out
+    m = next((x for x in moments(vid)["moments"] if x["window"] == window), None)
+    if m is None:
+        raise FileNotFoundError(f"moment {window} introuvable")
+    t = max(0.0, m["peak"] - m["window_start"])  # temps dans le fichier de la plage
+    result = run(["ffmpeg", "-y", "-v", "error", "-ss", f"{t:.2f}", "-i", ROOT / m["video"],
+                  "-frames:v", "1", "-vf", "scale=320:-2", "-q:v", "4", out], timeout=60)  # fmt: skip
+    if result.returncode != 0 or not out.exists():
+        raise RuntimeError(f"image du moment {window} impossible : {last_line(result.stderr)}")
     return out
 
 

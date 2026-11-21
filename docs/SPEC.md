@@ -426,3 +426,17 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     `w_01.clap.npy` pour la vidéo). Ne retient plus que `<stem>.<ext>`.
   - Validé en réel depuis l'interface : nouvelle VOD → Analyser → écran VOD en direct jusqu'à « 24 moments »
     (3 zones re-transcrites, transcriptions et candidats identiques à l'original).
+- **M8 — étape 5 (tri des moments), 2026-11-21**
+  - `/sort?vod=<id>&w=<plage>` (maquette 4) : un moment à la fois, du score le plus haut au plus bas ; « Moment N / total »,
+    vidéo de la plage lue **seulement entre le début et la fin du passage** (Espace), score sur 10, horodatage VOD,
+    durée ; forme d'onde de toute la plage avec le passage en jaune et **deux poignées** (bornées par la durée min /
+    max du brief), clic pour se placer ; raisons en pastilles (« Pic de chat ×6,0 », « Rires »…) ; texte du passage.
+  - Clavier : **A** garder, **X** rejeter, **J / K** précédent / suivant, **Espace** lire, **[ ]** début / fin à la tête de
+    lecture. « Passer » = décision `skip` (compte comme restant). Après une décision, on saute au prochain moment non
+    décidé ; l'affichage n'attend pas l'API (mise à jour immédiate du cache, rechargée ensuite).
+  - Bornes : enregistrées dans edits.json, **recalées sur les mots** par le cœur à la lecture (`apply_edit`).
+  - Colonne de droite : progression (gardés / rejetés / restants, une case par moment, cliquable) et « Ensuite » :
+    les 4 prochains moments non décidés avec une **image au pic** (`GET /api/vods/<id>/moments/<plage>/frame`, ffmpeg,
+    320 px, en cache `w_XX.frame.jpg`), l'accroche (rerank) ou les premiers mots.
+  - « Rendre les N moments gardés » (dès qu'il y en a un) et **Ctrl R** (palette → `?render=kept`, confirmation
+    avant de lancer) → `POST /api/vods/<id>/render {kept: true}`.

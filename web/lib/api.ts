@@ -199,3 +199,39 @@ export type Vod = {
 };
 
 export type VodItem = { video_id: string; title: string; campaign: string; duration: number; updated: number };
+
+/** Moment à trier (qclip/overview.py · moments). Temps en secondes de la VOD ; temps dans le fichier = t - window_start. */
+export type Moment = {
+  window: number;
+  id: number;
+  start: number;
+  end: number;
+  duration: number;
+  peak: number;
+  score: number; // signaux, ramenés sur 10 (le meilleur moment = 10)
+  llm_score: number | null;
+  reasons: string[];
+  text: string;
+  hook: string;
+  title: string;
+  decision: "keep" | "reject" | "skip" | null;
+  video: string;
+  window_start: number;
+  window_duration: number | null;
+  edited: boolean;
+};
+
+export type Moments = {
+  video_id: string;
+  moments: Moment[];
+  kept: number;
+  rejected: number;
+  remaining: number;
+  title: string;
+  campaign: string;
+  campaign_name: string;
+  min_len: number;
+  max_len: number;
+};
+
+export type Peaks = { duration: number; peaks: number[] };
