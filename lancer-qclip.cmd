@@ -42,7 +42,7 @@ if errorlevel 1 (
   echo [qClip] Interface déjà lancée.
 )
 
-echo [qClip] En attente de l'interface (la première compilation prend jusqu'à une minute)…
+echo [qClip] En attente de l'interface (la première compilation prend jusqu'à 2 minutes, ensuite quelques secondes)…
 set /a tries=0
 :wait
 curl -s -o nul http://localhost:3000 && goto ready
