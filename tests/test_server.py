@@ -143,3 +143,11 @@ def test_clip_status_follows_posts_and_payments() -> None:
     assert overview.clip_status(ok, [row]) == "rendu"
     assert overview.clip_status(ok, [{**row, "post_url": "https://www.tiktok.com/@moi/video/1"}]) == "poste"
     assert overview.clip_status(ok, [{"post_url": "https://x.y/z", "paid": "7.20"}]) == "paye"
+
+
+def test_pipeline_reads_only_clip_meta_files(client: TestClient) -> None:
+    assert overview.CLIP_META_RE.fullmatch("clip_3.json")
+    assert not overview.CLIP_META_RE.fullmatch("clip_3.safety.json")  # M6 : bug trouvé, /api/clips plantait
+    assert not overview.CLIP_META_RE.fullmatch("clip_3.render.json")
+    assert client.get("/api/clips").status_code == 200
+    assert client.get("/api/dashboard").status_code == 200

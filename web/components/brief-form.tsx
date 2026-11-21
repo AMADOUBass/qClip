@@ -174,7 +174,7 @@ export function BriefFormView({ initial, slug }: { initial?: BriefView; slug?: s
               <div className="grid grid-cols-3 gap-4">
                 <LayoutCard selected={values.layout === "facecam"} onClick={() => setValue("layout", "facecam")} title="Facecam" detail="Webcam en haut, jeu en bas" split />
                 <LayoutCard selected={values.layout === "blur"} onClick={() => setValue("layout", "blur")} title="Flou" detail="Image nette sur fond flouté" />
-                <LayoutCard selected={false} disabled title="Recadrage" detail="Disponible en M6" />
+                <LayoutCard selected={values.layout === "crop"} onClick={() => setValue("layout", "crop")} title="Recadrage" detail="Bande 9:16, centrée sur le visage" />
               </div>
             </Field>
           </Section>
@@ -309,13 +309,13 @@ function Suffix({ unit, reg, step = "1" }: { unit: string; reg: UseFormRegisterR
   );
 }
 
-function LayoutCard({ title, detail, selected, onClick, disabled, split }: {
-  title: string; detail: string; selected: boolean; onClick?: () => void; disabled?: boolean; split?: boolean;
+function LayoutCard({ title, detail, selected, onClick, split }: {
+  title: string; detail: string; selected: boolean; onClick?: () => void; split?: boolean;
 }) {
   return (
-    <button type="button" disabled={disabled} onClick={onClick} title={disabled ? "Le recadrage arrive au jalon M6" : undefined}
+    <button type="button" onClick={onClick}
             className={cn("flex items-center gap-4 rounded-2xl border p-4 text-left transition-colors",
-              selected ? "border-yellow bg-yellow-soft/50" : "border-line bg-secondary/50", disabled && "cursor-not-allowed opacity-50")}>
+              selected ? "border-yellow bg-yellow-soft/50" : "border-line bg-secondary/50")}>
       <span className="flex h-16 w-10 shrink-0 flex-col overflow-hidden rounded-md bg-[#c9ccd6]">
         {split && <span className="h-1/3 bg-yellow" />}
       </span>

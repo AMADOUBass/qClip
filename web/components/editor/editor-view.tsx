@@ -33,6 +33,8 @@ export function EditorView({ data, moments }: { data: EditorData; moments: Momen
   const [clipTime, setClipTime] = useState(0);
   const [safeZones, setSafeZones] = useState(false);
   const [hook, setHook] = useState(data.hook);
+  const [zoom, setZoom] = useState(data.preview.zoom);
+  const saveZoom = () => Math.abs(zoom - data.preview.zoom) > 0.001 && save.mutate({ zoom: Math.round(zoom * 100) / 100 });
   const fileStart = data.start - data.window_start;
 
   // Navigation : les clips gardés au tri (sinon tous les moments), du plus fort au plus faible.
@@ -117,6 +119,11 @@ export function EditorView({ data, moments }: { data: EditorData; moments: Momen
             <TriangleAlert className="size-4" /> {failing.length === 1 ? failing[0].detail : `${failing.length} points du brief`}
           </span>
         )}
+        {!data.safety.ok && (
+          <span className="flex items-center gap-2 rounded-xl bg-orange-soft px-4 py-2 font-medium text-orange">
+            <TriangleAlert className="size-4" /> Démonétisation
+          </span>
+        )}
         <button type="button" disabled={index <= 0} onClick={() => goTo(index - 1)}
                 className="h-12 rounded-2xl border border-line bg-surface px-5 font-medium disabled:opacity-40">← Clip précédent</button>
         <button type="button" disabled={index >= pool.length - 1} onClick={() => goTo(index + 1)}
@@ -129,6 +136,10 @@ export function EditorView({ data, moments }: { data: EditorData; moments: Momen
              onLoadedMetadata={(e) => { e.currentTarget.currentTime = fileStart; }}
              onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />
 
+      {!data.safety.ok && (
+        <SafetyAlert data={data} pending={save.isPending} onShift={(s) => save.mutate({ start: data.start + s })} />
+      )}
+
       <div className="mb-8 grid grid-cols-[minmax(0,1fr)_minmax(0,25rem)_minmax(0,1fr)] gap-8">
         <Transcript words={data.words} clipTime={clipTime} onSeek={seek} pending={correct.isPending}
                     onCorrect={(w, text, everywhere) => correct.mutate(everywhere
@@ -136,7 +147,7 @@ export function EditorView({ data, moments }: { data: EditorData; moments: Momen
                       : { start: w.vod_start, text })} />
 
         <div>
-          <Preview data={data} video={video} clipTime={clipTime} style={style} hook={hook} safeZones={safeZones} />
+          <Preview data={data} video={video} clipTime={clipTime} style={style} hook={hook} safeZones={safeZones} zoom={zoom} />
           <div className="mt-4 flex justify-center gap-3">
             <button type="button" onClick={() => setSafeZones(!safeZones)} aria-pressed={safeZones}
                     className={cn("flex h-12 items-center gap-2 rounded-2xl border px-4 font-medium",
@@ -156,9 +167,8 @@ export function EditorView({ data, moments }: { data: EditorData; moments: Momen
             <h2 className="mb-4 font-display text-xl font-bold">Layout</h2>
             <div className="grid grid-cols-3 rounded-2xl bg-secondary p-1">
               {(["facecam", "blur", "crop"] as const).map((l) => (
-                <button key={l} type="button" disabled={l === "crop" || save.isPending} onClick={() => save.mutate({ layout: l })}
-                        title={l === "crop" ? "Disponible en M6" : undefined}
-                        className={cn("h-11 rounded-xl font-medium", data.layout === l ? "bg-yellow" : "text-muted-foreground", l === "crop" && "opacity-50")}>
+                <button key={l} type="button" disabled={save.isPending} onClick={() => save.mutate({ layout: l })}
+                        className={cn("h-11 rounded-xl font-medium", data.layout === l ? "bg-yellow" : "text-muted-foreground")}>
                   {l === "facecam" ? "Facecam" : l === "blur" ? "Flou" : "Recadrage"}
                 </button>
               ))}
@@ -188,9 +198,17 @@ export function EditorView({ data, moments }: { data: EditorData; moments: Momen
             <p className="mt-2 text-sm text-muted-foreground">
               {data.hook_auto ? "Citation du clip choisie automatiquement · " : ""}affichée 3 s en haut · vide = automatique
             </p>
-            <div className="mt-5 opacity-50" title="Disponible en M6">
-              <div className="mb-2 flex justify-between text-muted-foreground"><span>Variation anti-doublon (zoom)</span><span className="font-mono">M6</span></div>
-              <input type="range" disabled className="w-full" aria-label="Variation anti-doublon (disponible en M6)" />
+            <div className="mt-5">
+              <div className="mb-2 flex justify-between text-muted-foreground">
+                <span>Variation anti-doublon (zoom)</span><span className="font-mono text-ink">{Math.round(zoom * 100)} %</span>
+              </div>
+              <input type="range" min={100} max={Math.round(data.preview.zoom_max * 100)} step={1} value={Math.round(zoom * 100)}
+                     aria-label="Variation anti-doublon (zoom)" className="w-full accent-olive"
+                     onChange={(e) => setZoom(Number(e.target.value) / 100)}
+                     onPointerUp={() => saveZoom()} onKeyUp={() => saveZoom()} onBlur={() => saveZoom()} />
+              <p className="mt-1 text-sm text-muted-foreground">
+                Image légèrement agrandie (le texte n&apos;est pas touché) · défaut {Math.round(data.preview.zoom_default * 100)} %
+              </p>
             </div>
           </section>
 
@@ -209,6 +227,31 @@ export function EditorView({ data, moments }: { data: EditorData; moments: Momen
 
       <Timeline vid={vid} data={data} clipTime={clipTime} onSeek={seek} />
     </>
+  );
+}
+
+/** Risque de démonétisation (safety.py) : ce qui est dit / entendu dans les 7 premières secondes, et le correctif. */
+function SafetyAlert({ data, pending, onShift }: { data: EditorData; pending: boolean; onShift: (s: number) => void }) {
+  const s = data.safety;
+  const what = s.flags.map((f) => `${f.kind === "gros mot" ? "Gros mot" : "Son violent"} « ${f.detail} » à ${clock(f.at)}`);
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl border border-orange/30 bg-orange-soft px-5 py-4" role="alert">
+      <TriangleAlert className="size-5 shrink-0 text-orange" />
+      <p className="min-w-0 flex-1">
+        <span className="font-semibold text-orange">{[...new Set(what)].slice(0, 3).join(" · ")}</span>
+        <span className="block text-sm text-muted-foreground">
+          {s.rule}{s.vision ? "" : " Images non vérifiées : regarde aussi le début."}
+        </span>
+      </p>
+      {s.shift_s != null ? (
+        <button type="button" disabled={pending} onClick={() => onShift(s.shift_s as number)}
+                className="h-11 rounded-xl bg-orange px-4 font-semibold text-white disabled:opacity-60">
+          Décaler le début de {s.shift_s.toLocaleString("fr-FR")} s
+        </button>
+      ) : (
+        <span className="text-sm text-muted-foreground">Aucun décalage possible sans passer sous la durée min du brief.</span>
+      )}
+    </div>
   );
 }
 

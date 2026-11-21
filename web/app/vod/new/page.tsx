@@ -11,7 +11,7 @@ import { useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { ApiDown } from "@/components/states";
-import { AnalyzeForm } from "@/components/vod/analyze-form";
+import { AnalyzeForm, BatchForm } from "@/components/vod/analyze-form";
 import { type BriefView, type CampaignSummary, api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +85,15 @@ export default function NewVodPage() {
           </p>
         </section>
       </div>
+
+      <section className="card-qc mt-6 max-w-5xl p-8">
+        <h2 className="title-lg mb-2">Plusieurs VOD</h2>
+        <p className="mb-4 text-muted-foreground">
+          Une URL par ligne, même campagne et même règle de source : les analyses s&apos;enchaînent seules (≈ 20 min par VOD
+          de 4 h sur cette machine).
+        </p>
+        <BatchForm campaign={slug ?? undefined} disabledReason={ok ? undefined : "Confirme d'abord la règle de source"} />
+      </section>
     </>
   );
 }

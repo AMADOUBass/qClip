@@ -79,6 +79,7 @@ class RenderConfig(StrictModel):
     fps: int = Field(gt=0, le=120)
     encoder: Literal["auto", "h264_qsv", "libx264"]
     lufs: float = Field(le=0)
+    zoom: float = Field(default=1.0, ge=1.0, le=1.10)  # variation anti-doublon par défaut (l'éditeur la règle par clip)
 
 
 class SubtitleConfig(StrictModel):

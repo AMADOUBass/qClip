@@ -1,10 +1,11 @@
+import shutil
 from pathlib import Path
 
 import pytest
 
 from qclip.config import load_config
 from qclip.facecam import Facecam, classify, rect_around_face
-from qclip.render import choose_layout, save_words_tsv
+from qclip.render import choose_layout, save_words_tsv, with_zoom
 from qclip.subtitles import SAFE_BOTTOM, TimedWord, build_ass, group_lines, override_color
 
 
@@ -81,3 +82,39 @@ def test_choose_layout_falls_back_to_blur() -> None:
     assert layout.name == "facecam" and warning is None
     assert 640 < layout.subs_y < SAFE_BOTTOM  # sous la webcam, au-dessus de la zone interdite
     assert "vstack" in layout.filter
+
+
+def test_crop_layout_follows_the_face_only_in_fullcam() -> None:
+    face = Facecam("fullcam", [1500, 300, 200, 260], None, "yunet")  # visage à droite de l'image
+    layout, warning = choose_layout("crop", face, 30, 1920, 1080)
+    assert warning is None and layout.name == "crop" and layout.crop is not None
+    x, width = layout.crop
+    assert width == 608 and x + width <= 1920 and x <= 1600 <= x + width  # bande 9:16 centrée sur le visage
+    webcam = Facecam("overlay", [1700, 60, 80, 100], [1500, 40, 380, 225], "yunet")  # webcam dans un coin
+    assert choose_layout("crop", webcam, 30, 1920, 1080)[0].crop == ((1920 - 608) // 2, 608)  # centre de l'image
+    assert layout.subs_y < SAFE_BOTTOM
+
+
+def test_zoom_is_applied_after_the_layout_and_bounded() -> None:
+    base = choose_layout("blur", None, 30, 1920, 1080)[0]
+    assert with_zoom(base, 1.0) is base
+    zoomed = with_zoom(base, 1.04)
+    assert zoomed.zoom == 1.04 and zoomed.filter.endswith("scale=1124:1996,crop=1080:1920[v]")
+    with pytest.raises(ValueError):
+        with_zoom(base, 1.2)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg absent")
+def test_crop_and_zoom_graph_runs_in_ffmpeg(tmp_path: Path) -> None:
+    from qclip.utils.ffmpeg import ffprobe, run
+
+    layout = with_zoom(
+        choose_layout("crop", Facecam("fullcam", [900, 400, 200, 250], None, "yunet"), 30, 1920, 1080)[0], 1.03
+    )
+    out = tmp_path / "crop.mp4"
+    result = run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=1920x1080:r=30:d=1",
+                  "-filter_complex", layout.filter, "-map", "[v]", "-c:v", "libx264", "-preset", "ultrafast",
+                  out])  # fmt: skip
+    assert result.returncode == 0, result.stderr
+    info = ffprobe(out)
+    assert (info.width, info.height) == (1080, 1920)

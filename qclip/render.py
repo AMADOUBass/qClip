@@ -22,14 +22,17 @@ TOP_H = 640  # layout facecam : zone webcam en haut (1080 x 640), jeu en bas (10
 FG_H = round(WIDTH * 9 / 16)  # layout blur : image 16:9 au centre (1080 x 608)
 LUFS_TP, LUFS_LRA = -1.5, 11.0
 WATERMARK = "TEST — NE PAS POSTER"
+MAX_ZOOM = 1.10  # variation anti-doublon : au-delà, on perd trop de bord d'image
 
 
 @dataclass
 class Layout:
-    name: str  # facecam | blur
+    name: str  # facecam | blur | crop
     filter: str  # graphe ffmpeg : [0:v] → [v]
     subs_y: int  # centre vertical des sous-titres
     hook_y: int  # centre vertical de l'accroche
+    crop: tuple[int, int] | None = None  # layout crop : (x, largeur) de la bande 9:16 prise dans la source
+    zoom: float = 1.0  # variation anti-doublon (agrandissement centré, après le layout)
 
 
 def blur_layout(fps: int) -> Layout:
@@ -62,6 +65,18 @@ def facecam_layout(fps: int, rect: list[int], src_w: int, src_h: int) -> Layout:
     return Layout("facecam", graph, subs_y=TOP_H + (SAFE_BOTTOM - TOP_H) * 2 // 3, hook_y=TOP_H + 90)
 
 
+def crop_layout(fps: int, face: list[int] | None, src_w: int, src_h: int) -> Layout:
+    """Recadrage : bande 9:16 de toute la hauteur de la source, centrée sur le visage (caméra plein cadre)
+    ou au centre de l'image, agrandie en 1080 x 1920."""
+    width = min(src_w, round(src_h * WIDTH / HEIGHT))
+    width -= width % 2
+    center = face[0] + face[2] / 2 if face else src_w / 2
+    x = int(min(max(center - width / 2, 0), src_w - width))
+    graph = f"[0:v]fps={fps},crop={width}:{src_h}:{x}:0,scale={WIDTH}:{HEIGHT}[v]"
+    blur = blur_layout(fps)  # mêmes positions de texte : sous-titres au-dessus de la zone interdite, accroche en haut
+    return Layout("crop", graph, subs_y=blur.subs_y, hook_y=blur.hook_y, crop=(x, width))
+
+
 def choose_layout(wanted: str, facecam: Facecam | None, fps: int, src_w: int, src_h: int) -> tuple[Layout, str | None]:
     """Layout du brief, ou repli sur blur (avec la raison) si la facecam n'a pas de sens pour cette VOD."""
     if wanted == "facecam":
@@ -71,8 +86,50 @@ def choose_layout(wanted: str, facecam: Facecam | None, fps: int, src_w: int, sr
             "aucune webcam détectée")  # fmt: skip
         return blur_layout(fps), f"layout facecam impossible ({reason}) : repli sur blur"
     if wanted == "crop":
-        return blur_layout(fps), "layout crop prévu au jalon M6 : repli sur blur"
+        # Centré sur le visage seulement s'il occupe l'image (fullcam) ; une webcam dans un coin n'est pas le sujet.
+        face = facecam.face if facecam and facecam.mode == "fullcam" else None
+        return crop_layout(fps, face, src_w, src_h), None
     return blur_layout(fps), None
+
+
+def with_zoom(layout: Layout, zoom: float) -> Layout:
+    """Variation anti-doublon : image agrandie de `zoom` (1,00-1,10) et recadrée au centre, avant le texte.
+    Sous-titres, accroche et overlay restent nets et à leur place (ils sont ajoutés après)."""
+    if not 1.0 <= zoom <= MAX_ZOOM:
+        raise ValueError(f"zoom {zoom} hors de [1, {MAX_ZOOM}]")
+    if zoom == 1.0:
+        return layout
+    if not layout.filter.endswith("[v]"):
+        raise ValueError("graphe de layout inattendu (doit finir par [v])")
+    w, h = round(WIDTH * zoom / 2) * 2, round(HEIGHT * zoom / 2) * 2
+    graph = f"{layout.filter[:-3]}[pre];[pre]scale={w}:{h},crop={WIDTH}:{HEIGHT}[v]"
+    return Layout(layout.name, graph, layout.subs_y, layout.hook_y, layout.crop, zoom)
+
+
+def clip_layout(
+    work: Path,
+    c: dict[str, Any],
+    wanted: str,
+    brief_facecam: list[int] | None,
+    src_w: int,
+    src_h: int,
+    fps: int,
+    zoom: float,
+    force: bool = False,
+) -> tuple[Layout, str | None, Facecam | None]:
+    """Layout réellement rendu pour un passage (`c` : window, start, file, file_start, duration), zoom compris.
+    Partagé par le rendu et l'aperçu de l'éditeur : les deux ne peuvent pas diverger."""
+    facecam: Facecam | None = None
+    if wanted in ("facecam", "crop"):
+        if brief_facecam:
+            facecam = Facecam("overlay", None, brief_facecam, "brief")
+        else:  # la scène change pendant un live : la facecam se cherche dans chaque clip
+            from qclip.facecam import detect_for_clip
+
+            cache = work / "facecam" / f"w{c['window']:02d}_{c['start']:.1f}.json"  # dépend du passage
+            facecam = detect_for_clip(work / c["file"], c["file_start"], c["duration"], src_w, src_h, cache, force)
+    layout, warning = choose_layout(wanted, facecam, fps, src_w, src_h)
+    return with_zoom(layout, zoom), warning, facecam
 
 
 def measure_loudness(video: Path, start: float, duration: float) -> dict[str, str]:
@@ -201,7 +258,6 @@ def render_candidates(
     from qclip.campaign import ASSETS_DIR, load_campaign
     from qclip.config import load_config
     from qclip.edits import apply_edit, corrected, load_edits
-    from qclip.facecam import Facecam, detect_for_clip
     from qclip.ingest import load_fetched
     from qclip.sources import WORK_DIR
     from qclip.transcribe import transcript_path
@@ -255,16 +311,10 @@ def render_candidates(
         words = corrected(all_words, edit.get("corrections", {}))
         c = apply_edit(c, edit, words, window_end[c["window"]])
         wanted = layout_name or edit.get("layout") or brief.layout
-        # La scène change pendant un live : la facecam se cherche dans chaque clip.
-        facecam: Facecam | None = None
-        if wanted == "facecam":
-            if brief.facecam:
-                facecam = Facecam("overlay", None, brief.facecam, "brief")
-            else:
-                cache = work / "facecam" / f"w{c['window']:02d}_{c['start']:.1f}.json"  # dépend du passage
-                facecam = detect_for_clip(work / c["file"], c["file_start"], c["duration"], probe.width,
-                                          probe.height, cache, force)  # fmt: skip
-        layout, warning = choose_layout(wanted, facecam, config.render.fps, probe.width, probe.height)
+        layout, warning, facecam = clip_layout(
+            work, c, wanted, brief.facecam, probe.width, probe.height, config.render.fps,
+            edit.get("zoom", config.render.zoom), force,
+        )  # fmt: skip
         if warning:
             steps.info(f"clip {c['id']} : {warning}")
         inside = [w for w in words if c["start"] <= w["start"] and w["end"] <= c["end"]]
@@ -274,8 +324,9 @@ def render_candidates(
         with steps.step(f"clip {c['id']} ({c['duration']:.0f} s, {layout.name}, {encoder})"):
             info = render_clip(c, work, out_path, layout, words, config.subtitle, config.render.lufs, encoder,
                                clip_hook, mention, brief.test_only, overlay, edit.get("style"))  # fmt: skip
-        meta = {"candidate": c, "layout": layout.name, "facecam": asdict(facecam) if facecam else None,
-                "encoder": encoder, "hook": clip_hook, "layout_filter": layout.filter, **info}  # fmt: skip
+        meta = {"candidate": c, "layout": layout.name, "zoom": layout.zoom,
+                "facecam": asdict(facecam) if facecam else None, "encoder": encoder, "hook": clip_hook,
+                "layout_filter": layout.filter, **info}  # fmt: skip
         out_path.with_suffix(".render.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), "utf-8")
         with steps.step(f"meta clip {c['id']} (titre, légende, miniature)"):
             post = write_meta(slug, vid, c, out_path, inside, llm)
@@ -283,6 +334,15 @@ def render_candidates(
                    + ("" if post["compliance"]["ok"] else " — ⚠️ brief non respecté"))  # fmt: skip
         results.append({"path": out_path, **meta, "post": post})
     return results
+
+
+def clip_safety(vid: str, c: dict[str, Any], words: list[dict[str, Any]], labels: list[str], min_len: float) -> dict:
+    """Verdict démonétisation du passage (safety.py) : gros mots et sons violents dans les 7 premières secondes."""
+    from qclip.safety import check, window_events
+    from qclip.sources import WORK_DIR
+
+    found = window_events(WORK_DIR / vid / "windows", c["window"], words, labels)
+    return check(c["start"], c["end"], found, min_len)
 
 
 def write_meta(
@@ -332,7 +392,9 @@ def write_meta(
         "llm": llm or None,
         "test_only": brief.test_only,
         "compliance": compliance(brief, duration, caption, title, render_info.get("overlay", False)),
+        "safety": clip_safety(vid, c, words, config.audio_event_labels, brief.clip.min_len),
     }
+    clip.with_suffix(".safety.json").write_text(json.dumps(post["safety"], ensure_ascii=False, indent=2), "utf-8")
     clip.with_suffix(".caption.txt").write_text(caption, encoding="utf-8")
     clip.with_suffix(".json").write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding="utf-8")
     sources = json.loads((ROOT / "input" / slug / "sources.json").read_text(encoding="utf-8"))

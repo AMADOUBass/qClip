@@ -18,7 +18,8 @@ test("éditeur : aperçu et ligne de temps", async ({ page, request }) => {
   await expect(page.getByText("Transcription")).toBeVisible({ timeout: 60_000 });
   await expect(page.locator("canvas")).toBeVisible();
   await expect(page.getByRole("button", { name: /Néon jaune/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Recadrage" })).toBeDisabled(); // M6
+  await expect(page.getByRole("button", { name: "Recadrage" })).toBeEnabled();
+  await expect(page.getByLabel("Variation anti-doublon (zoom)")).toBeVisible();
   await expect(page.getByLabel("Accroche")).toHaveValue(editor.hook);
 
   // Clic au milieu de la ligne de temps : un mot de la transcription devient le mot courant

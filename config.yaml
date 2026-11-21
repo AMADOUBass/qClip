@@ -14,5 +14,5 @@ audio_event_labels: ["people laughing", "person screaming", "explosion", "gunsho
 keywords: ["oh", "nan", "wesh", "c'est pas possible", "tabarnak", "wallah"]
 features: { clap: true, scenes: true }
 llm: { use_llm: false, use_vision: false, text_model: "qwen3.5:2b-q4_K_M", vision_model: "qwen3.5:2b-q4_K_M" }   # 2B : tient dans 8 Go de RAM
-render: { layout: facecam, fps: 30, encoder: auto, lufs: -14 }
+render: { layout: facecam, fps: 30, encoder: auto, lufs: -14, zoom: 1.02 }   # zoom : variation anti-doublon (1,00-1,10)
 subtitle: { font: "Montserrat ExtraBold", size: 90, color: "#FFFFFF", highlight: "#FFD400", outline: 6, words_per_line: 3, uppercase: true }

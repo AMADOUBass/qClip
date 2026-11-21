@@ -137,7 +137,7 @@ qclip campaign new <slug>
 qclip scout <campagne> [--url ...]            # chat + audio léger → fenêtres
 qclip process <campagne> [--video <id>] [--auto] [-n 10] [--force]   # scout → fetch → … → render
 qclip render <campagne> --video <id> --ids 1,3,5
-qclip safety <clip.mp4> [--campaign <slug>]
+qclip safety <campagne> [--video <id>] [--ids 1,3]   # risque de démonétisation des clips rendus (M6)
 qclip bench-asr <wav> [--backends parakeet,whisper,qwen3]
 qclip bench-sep <wav>                          # compare les modèles de séparation : temps et qualité
 qclip log <campagne> <clip> --platform tiktok --url <post>
@@ -191,7 +191,7 @@ subtitle: { font: "Montserrat ExtraBold", size: 90, color: "#FFFFFF", highlight:
 - **M3** : signaux fins + candidates. ✔ = les 5 meilleurs sont de vrais moments forts (je valide). Tests pytest sur le scoring.
 - **M4** : render `facecam` + `blur` + sous-titres + loudnorm (QSV). ✔ = `/verify-clip` OK, sous-titres à ±150 ms.
 - **M5** : meta (gabarits) + caption.txt + miniature + `posts.csv` / `log` / `stats` ; rerank LLM en option.
-- **M6** : safety + `crop` + lot + variations anti-doublon.
+- **M6** : safety + `crop` + lot + variations anti-doublon. ✔ 2026-11-21.
 - **M7** : perf : objectif < 30 min de calcul pour une VOD de 4 h avec chat, sur cette machine. ✔ 2026-11-21 (21,1 min réseau compris).
 - **M8** : interface de revue (§7), seulement après validation de M4. ✔ 2026-11-21 (étapes 1 à 7).
 
@@ -503,3 +503,30 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     estimer le temps restant des prochaines analyses.
   - Pistes restantes si besoin (non faites, l'objectif est atteint) : télécharger la zone suivante pendant qu'on
     transcrit la précédente (≈ 2 min de réseau masquées) ; garder CLAP chargé entre deux VOD (34 s).
+- **M6, 2026-11-21**
+  - **Layout `crop` (Recadrage)** : bande 9:16 de toute la hauteur de la source (608 px pour du 1080p), agrandie en
+    1080x1920, **centrée sur le visage si la caméra occupe l'image** (`fullcam`, détection YuNet existante), sinon au
+    centre (une webcam dans un coin n'est pas le sujet). Positions du texte = celles de blur. Actif dans le brief et
+    l'éditeur. Testé en rendu réel (zone 2 : bande x = 610, visage centré) et dans l'aperçu.
+  - Facecam + choix du layout + zoom dans une seule fonction `render.clip_layout`, utilisée par le rendu **et** par
+    l'aperçu de l'éditeur (plus de duplication possible).
+  - **Variation anti-doublon = zoom** : image agrandie (1,00-1,10) et recadrée au centre **après** le layout, avant
+    l'overlay et les sous-titres (le texte reste net et dans les zones sûres). Défaut `render.zoom: 1.02`
+    (config.yaml), réglable par clip dans l'éditeur (`edits.json` → `zoom`). Miniature : même graphe, donc même zoom.
+  - **Safety sans LLM vision** (`qclip/safety.py`) : règle YouTube des 7 premières secondes. Signalés : gros mots
+    (liste `PROFANITY` de meta.py, sur les mots corrigés) et sons « explosion » / « coups de feu » de CLAP (p ≥ 0,5).
+    **« car crash » écarté** : il dépasse 0,5 sur 5 % d'un stream Just Chatting (bruits de bureau), mesuré sur la VOD
+    de test → faux positifs. Correctif proposé : le plus petit décalage du début (juste après un évènement) qui dégage
+    les 7 s sans passer sous la durée min du brief, sinon « aucun décalage possible ».
+    - Après chaque rendu : `clip_<n>.safety.json` + champ `safety` dans `clip_<n>.json`. `qclip safety <campagne>`
+      refait les verdicts sans réencoder. Un clip à risque passe « À revoir » dans le pipeline (badge
+      « Démonétisation », action « Décaler le début de N s et refaire le rendu »). L'éditeur recalcule le risque sur
+      les bornes en cours (bandeau + bouton « Décaler le début »).
+    - Images non vérifiées (`use_vision: false`, le 2B testé en M5 était trop faible) : le bandeau le rappelle.
+    - VOD de test : 1 clip sur 8 signalé (« enculé » à 2,7 s ; d'autres gros mots jusqu'à 13,3 s → aucun décalage
+      possible sans passer sous 15 s).
+  - **Lot** : la CLI traitait déjà toutes les sources d'une campagne (`qclip process <campagne>`). Dans l'interface,
+    « Plusieurs VOD » sur la page Nouvelle VOD : une URL par ligne (vérifiées, doublons retirés), mises en file dans
+    l'ordre, une à la fois.
+  - **Bug trouvé et corrigé** : le pipeline lisait tous les `clip_*.json`, y compris le nouveau `clip_3.safety.json`
+    → `/api/clips` (pipeline et accueil) plantait. Ne lit plus que `clip_<n>.json` ; test de non-régression.

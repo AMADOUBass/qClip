@@ -25,6 +25,7 @@ type Props = {
   style: SubtitleStyle;
   hook: string;
   safeZones: boolean;
+  zoom: number; // variation anti-doublon : agrandit l'image seulement (le texte est posé après, comme au rendu)
 };
 
 /** Dessine l'image courante de la vidéo selon le layout réellement rendu. */
@@ -34,6 +35,12 @@ function draw(ctx: CanvasRenderingContext2D, small: HTMLCanvasElement, v: HTMLVi
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, CW, CH);
   const rect = data.facecam?.rect;
+  if (data.preview.layout === "crop" && data.preview.crop) {
+    // crop=<largeur>:<hauteur>:<x>:0 puis agrandi en 1080 x 1920
+    const [x, width] = data.preview.crop;
+    ctx.drawImage(v, x, 0, width, sh, 0, 0, CW, CH);
+    return;
+  }
   if (data.preview.layout === "facecam" && rect) {
     const [x, y, w, h] = rect;
     const topH = data.preview.top_h * k;
@@ -62,7 +69,7 @@ function draw(ctx: CanvasRenderingContext2D, small: HTMLCanvasElement, v: HTMLVi
   ctx.drawImage(v, 0, 0, sw, sh, 0, (CH - fgH) / 2, CW, fgH);
 }
 
-export function Preview({ data, video, clipTime, style, hook, safeZones }: Props) {
+export function Preview({ data, video, clipTime, style, hook, safeZones, zoom }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
 
   // Image : redessinée à chaque image décodée (requestVideoFrameCallback) et après chaque saut.
@@ -101,7 +108,7 @@ export function Preview({ data, video, clipTime, style, hook, safeZones }: Props
     <div className="relative aspect-[9/16] w-full overflow-hidden rounded-[2rem] bg-ink [container-type:inline-size]"
          style={{ ["--k" as string]: `calc(100cqw / ${RW})` }}>
       <style>{`@font-face{font-family:${FONT};src:url(${API}/media/assets/fonts/Montserrat-ExtraBold.ttf);font-weight:800}`}</style>
-      <canvas ref={canvas} width={CW} height={CH} className="absolute inset-0 size-full" />
+      <canvas ref={canvas} width={CW} height={CH} className="absolute inset-0 size-full" style={{ transform: `scale(${zoom})` }} />
 
       {data.overlay?.url && (
         // eslint-disable-next-line @next/next/no-img-element -- overlay du brief, servi par l'API locale

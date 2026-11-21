@@ -18,11 +18,12 @@ from qclip.bench import SEP_MODELS, AsrResult, bench_asr, bench_sep
 from qclip.campaign import load_brief, load_campaign, new_campaign
 from qclip.candidates import build_candidates
 from qclip.config import ConfigError, cpu_threads, load_config
+from qclip.edits import corrected, load_edits
 from qclip.fetch import fetch_windows
 from qclip.ingest import ingest_windows
 from qclip.pipeline import process_vod
 from qclip.posts import campaign_stats, log_post
-from qclip.render import render_candidates, write_meta
+from qclip.render import clip_safety, render_candidates, write_meta
 from qclip.rerank import key as rerank_key
 from qclip.rerank import load_rerank, rerank_candidates
 from qclip.scout import format_hms, load_scout, scout_source, scout_urls, scouted_videos
@@ -391,6 +392,42 @@ def meta(
                 post = write_meta(campaign, vid, c, out_dir / f"clip_{c['id']}.mp4", inside, llm)
                 flag = "✅" if post["compliance"]["ok"] else "⚠️ "
                 console.print(f"{flag} clip {c['id']} — « {post['title']} »", soft_wrap=True)
+    except (*USER_ERRORS, ValueError) as e:
+        raise fail(e) from e
+
+
+@app.command()
+def safety(
+    campaign: Annotated[str, typer.Argument(help="Slug de la campagne")],
+    video: Annotated[str | None, typer.Option(help="video_id (work/<video_id>/)")] = None,
+    ids: Annotated[str | None, typer.Option(help="Clips, ex. 1,3 (défaut : tous les clips rendus)")] = None,
+) -> None:
+    """Risque de démonétisation des clips rendus : gros mots ou sons violents dans les 7 premières secondes."""
+    try:
+        wanted = {int(x) for x in ids.split(",") if x.strip()} if ids else None
+        config, brief = load_config(), load_campaign(campaign)
+        for vid in campaign_videos(campaign, video):
+            out_dir = WORK_DIR / vid / "renders" if brief.test_only else ROOT / "output" / campaign / vid
+            edits = load_edits(vid)
+            for render_json in sorted(out_dir.glob("clip_*.render.json")):
+                c = json.loads(render_json.read_text(encoding="utf-8"))["candidate"]
+                if wanted and c["id"] not in wanted:
+                    continue
+                raw = json.loads(transcript_path(WORK_DIR / vid / "windows", c["window"]).read_text("utf-8"))["words"]
+                words = corrected(raw, edits.get(c["window"], {}).get("corrections", {}))
+                verdict = clip_safety(vid, c, words, config.audio_event_labels, brief.clip.min_len)
+                clip = out_dir / f"clip_{c['id']}.mp4"
+                clip.with_suffix(".safety.json").write_text(json.dumps(verdict, ensure_ascii=False, indent=2), "utf-8")
+                post_path = clip.with_suffix(".json")
+                if post_path.exists():  # le pipeline lit le verdict dans clip_<n>.json
+                    post = json.loads(post_path.read_text(encoding="utf-8"))
+                    post_path.write_text(json.dumps({**post, "safety": verdict}, ensure_ascii=False, indent=2), "utf-8")
+                if verdict["ok"]:
+                    console.print(f"✅ clip {c['id']} — rien dans les 7 premières secondes")
+                    continue
+                found = ", ".join(f"{f['kind']} « {f['detail']} » à {f['at']:.1f} s" for f in verdict["flags"])
+                fix = f"décaler le début de {verdict['shift_s']} s" if verdict["shift_s"] else "aucun décalage possible"
+                console.print(f"⚠️  clip {c['id']} — {found} → {fix}", soft_wrap=True)
     except (*USER_ERRORS, ValueError) as e:
         raise fail(e) from e
 

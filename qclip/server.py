@@ -45,6 +45,7 @@ class EditBody(BaseModel):
     layout: str | None = None
     style: str | None = None
     hook: str | None = None
+    zoom: float | None = None
 
 
 class CorrectionBody(BaseModel):

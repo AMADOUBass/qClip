@@ -5,12 +5,12 @@
 // posté → vues / estimation, saisie des vues et du paiement ; payé → vues et montant payé.
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, X } from "lucide-react";
+import { Check, Copy, ExternalLink, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { type ComplianceCheck, type PipelineItem, media, post } from "@/lib/api";
+import { type ComplianceCheck, type PipelineItem, media, post, put } from "@/lib/api";
 import { clock, compact, money } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -59,7 +59,10 @@ export function ClipCard({ clip, wide }: { clip: PipelineItem; wide?: boolean })
             <Link href={editor} className="line-clamp-2 text-[1.05rem] font-semibold hover:underline">{clip.title || clip.hook}</Link>
           ) : <p className="line-clamp-2 text-[1.05rem] font-semibold">{clip.title || clip.hook}</p>}
           <p className="mt-1 font-mono text-sm text-muted-foreground">{clip.creator} · {clip.duration ? clock(clip.duration) : "—"}</p>
-          <p className="mt-3">
+          <p className="mt-3 flex flex-wrap gap-2">
+            {clip.safety && !clip.safety.ok && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-orange-soft px-2.5 py-1 text-orange"><TriangleAlert className="size-4" /> Démonétisation</span>
+            )}
             {clip.compliance?.ok ? (
               <span className="inline-flex items-center gap-1 rounded-lg bg-blue-soft px-2.5 py-1 text-blue"><Check className="size-4" /> OK</span>
             ) : clip.test_only ? (
@@ -103,6 +106,7 @@ function Problems({ clip, failing, editor }: { clip: PipelineItem; failing: Comp
   };
   return (
     <div className={cn("mt-4 space-y-3 rounded-2xl p-4", clip.test_only ? "bg-orange-soft" : "bg-pink-soft")}>
+      {clip.safety && !clip.safety.ok && <SafetyFix clip={clip} />}
       {failing.map((c) => {
         const f = fix[c.name] ?? { text: `${c.name} : ${c.detail}`, href: null, action: "" };
         return (
@@ -114,6 +118,40 @@ function Problems({ clip, failing, editor }: { clip: PipelineItem; failing: Comp
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Démonétisation : ce qui est dit / entendu dans les 7 premières secondes, et « décaler le début » (+ nouveau rendu). */
+function SafetyFix({ clip }: { clip: PipelineItem }) {
+  const client = useQueryClient();
+  const s = clip.safety as NonNullable<PipelineItem["safety"]>;
+  const fix = useMutation({
+    mutationFn: async (shift: number) => {
+      await put(`/api/vods/${clip.video_id}/moments/${clip.window}`, { start: (clip.vod_start as number) + shift });
+      return post(`/api/vods/${clip.video_id}/render`, { windows: [clip.window] });
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["clips"] });
+      toast.success("Début décalé, nouveau rendu lancé", { description: "Le clip revient ici une fois rendu." });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const first = s.flags[0];
+  return (
+    <div>
+      <p>
+        {first.kind === "gros mot" ? `Gros mot « ${first.detail} »` : `Son violent (${first.detail})`} à {clock(first.at)}
+        {s.flags.length > 1 && ` (+ ${s.flags.length - 1})`} — dans les 7 premières secondes, YouTube limite la pub.
+      </p>
+      {s.shift_s != null && clip.window != null && clip.vod_start != null ? (
+        <button type="button" disabled={fix.isPending} onClick={() => fix.mutate(s.shift_s as number)}
+                className="mt-1 font-semibold text-orange disabled:opacity-60">
+          Décaler le début de {s.shift_s.toLocaleString("fr-FR")} s et refaire le rendu →
+        </button>
+      ) : (
+        <p className="mt-1 text-sm text-muted-foreground">Aucun décalage possible sans passer sous la durée min : choisir un autre moment.</p>
+      )}
     </div>
   );
 }

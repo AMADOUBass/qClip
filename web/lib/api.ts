@@ -86,6 +86,15 @@ export type ClipPost = { url: string; views: number; paid: number };
 
 export type ComplianceCheck = { name: string; ok: boolean; detail: string };
 
+/** Risque de démonétisation (qclip/safety.py) : gros mots / sons violents dans les 7 premières secondes. */
+export type Safety = {
+  ok: boolean;
+  rule: string;
+  flags: { kind: "gros mot" | "violence"; at: number; detail: string }[];
+  shift_s: number | null; // décalage du début qui rend le clip sûr (null : impossible sans passer sous la durée min)
+  vision: boolean;
+};
+
 export type PipelineItem = {
   campaign: string;
   campaign_name: string;
@@ -98,6 +107,8 @@ export type PipelineItem = {
   duration: number | null;
   status: "a_revoir" | "rendu" | "poste" | "paye";
   compliance: { ok: boolean; checks: ComplianceCheck[] } | null;
+  safety: Safety | null; // absent pour les clips rendus avant M6
+  vod_start: number | null;
   caption: string;
   thumbnail: string;
   video: string;
@@ -266,11 +277,16 @@ export type EditorData = Moment & {
   test_only: boolean;
   hook_auto: boolean;
   compliance: { ok: boolean; checks: { name: string; ok: boolean; detail: string }[] };
+  safety: Safety;
   min_len: number;
   max_len: number;
   preview: {
-    layout: "facecam" | "blur"; // layout réellement rendu
+    layout: "facecam" | "blur" | "crop"; // layout réellement rendu
     note: string | null;
+    crop: [number, number] | null; // layout crop : (x, largeur) de la bande 9:16 dans la source
+    zoom: number; // variation anti-doublon appliquée
+    zoom_default: number;
+    zoom_max: number;
     subs_y: number;
     hook_y: number;
     top_h: number;

@@ -4,6 +4,7 @@ Les chemins de fichiers sont renvoyés relatifs à la racine du projet (« work/
 """
 
 import json
+import re
 import shutil
 import time
 from datetime import UTC, datetime, timedelta
@@ -18,13 +19,14 @@ from qclip.config import load_config
 from qclip.edits import apply_edit, corrected, load_edits
 from qclip.meta import best_quote, compliance, make_caption, make_hashtags, make_hook, make_title
 from qclip.posts import campaign_stats, estimate, read_posts
-from qclip.render import FG_H, TOP_H, WATERMARK, choose_layout
+from qclip.render import FG_H, MAX_ZOOM, TOP_H, WATERMARK, clip_layout, clip_safety
 from qclip.rerank import key as rerank_key
 from qclip.rerank import load_rerank
 from qclip.sources import WORK_DIR
 from qclip.subtitles import HOLD, HOOK_SECONDS, LINE_GAP, MARGIN_L, MARGIN_R, SAFE_BOTTOM
 from qclip.utils.ffmpeg import ffprobe
 
+CLIP_META_RE = re.compile(r"clip_\d+\.json")  # infos d'un clip rendu (titre, conformité, sécurité)
 RADAR_BINS = 480
 PEAK_POINTS = 600
 LOW_CONFIDENCE = 0.5
@@ -339,7 +341,6 @@ def frame(vid: str, window: int) -> Path:
 
 
 def editor(vid: str, window: int) -> dict[str, Any]:
-    from qclip.facecam import Facecam
 
     work = WORK_DIR / vid
     scout = read_json(work / "scout.json", {})
@@ -354,22 +355,16 @@ def editor(vid: str, window: int) -> dict[str, Any]:
     inside = [w for w in words if m["start"] <= w["start"] and w["end"] <= m["end"]]
     probe = ffprobe(ROOT / m["video"])
     wanted = edit.get("layout") or brief.layout
-    facecam = None
-    if wanted == "facecam":
-        if brief.facecam:
-            facecam = Facecam("overlay", None, brief.facecam, "brief")
-        else:  # même détection (et même cache) que le rendu : l'aperçu montre ce que le rendu fera
-            from qclip.facecam import detect_for_clip
-
-            file_start = m["start"] - m["window_start"]
-            cache = work / "facecam" / f"w{window:02d}_{m['start']:.1f}.json"
-            facecam = detect_for_clip(ROOT / m["video"], file_start, m["duration"], probe.width, probe.height, cache)
+    zoom = edit.get("zoom", config.render.zoom)
+    # Même fonction (et même cache de facecam) que le rendu : l'aperçu montre ce que le rendu fera.
+    passage = {"window": window, "start": m["start"], "file": (ROOT / m["video"]).relative_to(work).as_posix(),
+               "file_start": m["start"] - m["window_start"], "duration": m["duration"]}  # fmt: skip
+    layout, layout_note, facecam = clip_layout(work, passage, wanted, brief.facecam, probe.width, probe.height,
+                                               config.render.fps, zoom)  # fmt: skip
     overlay = None
     if brief.overlay:
         image = ASSETS_DIR / scout["campaign"] / brief.overlay.file
         overlay = {**brief.overlay.model_dump(), "url": rel(image) if image.exists() else None}
-    # Mêmes choix que render_candidates / render_clip : l'aperçu montre ce que le rendu fera.
-    layout, layout_note = choose_layout(wanted, facecam, config.render.fps, probe.width, probe.height)
     # m["hook"] = accroche de l'éditeur ou du rerank ; m["title"] = titre du rerank (déjà filtrés, voir moments()).
     hook = m["hook"] or make_hook(inside, m["start"], config.keywords)
     title = m["title"] or make_title(brief.creator, best_quote(inside, m["start"], config.keywords, 10), m["reasons"])
@@ -401,11 +396,23 @@ def editor(vid: str, window: int) -> dict[str, Any]:
         "hook_auto": not m["hook"],  # accroche tirée d'une citation du clip, pas choisie
         "title": title,
         "compliance": check,
+        # Démonétisation sur les bornes actuelles (mots corrigés) : le risque se voit avant le rendu.
+        "safety": clip_safety(
+            vid,
+            {"window": window, "start": m["start"], "end": m["end"]},
+            words,
+            config.audio_event_labels,
+            brief.clip.min_len,
+        ),  # fmt: skip
         "min_len": brief.clip.min_len,
         "max_len": brief.clip.max_len,
         "preview": {
             "layout": layout.name,  # layout réellement rendu (repli sur blur si la facecam n'a pas de sens)
             "note": layout_note,
+            "crop": list(layout.crop) if layout.crop else None,  # layout crop : (x, largeur) de la bande 9:16
+            "zoom": layout.zoom,
+            "zoom_default": config.render.zoom,
+            "zoom_max": MAX_ZOOM,
             "subs_y": layout.subs_y,
             "hook_y": layout.hook_y,
             "top_h": TOP_H,
@@ -436,7 +443,8 @@ def clip_status(post: dict[str, Any], rows: list[dict[str, str]]) -> str:
         return "paye"
     if any(r["post_url"] for r in rows):
         return "poste"
-    return "rendu" if post.get("compliance", {}).get("ok") else "a_revoir"
+    safe = (post.get("safety") or {}).get("ok", True)  # clips rendus avant M6 : pas de verdict, pas de blocage
+    return "rendu" if post.get("compliance", {}).get("ok") and safe else "a_revoir"
 
 
 def pipeline(slug: str | None = None) -> dict[str, Any]:
@@ -450,7 +458,7 @@ def pipeline(slug: str | None = None) -> dict[str, Any]:
         for vid in scouted(s):
             out_dir = WORK_DIR / vid / "renders" if brief.test_only else ROOT / "output" / s / vid
             for meta_path in sorted(out_dir.glob("clip_*.json")):
-                if meta_path.name.endswith((".render.json",)):
+                if not CLIP_META_RE.fullmatch(meta_path.name):  # pas clip_3.render.json ni clip_3.safety.json
                     continue
                 post = read_json(meta_path, {})
                 cid = meta_path.stem.split("_")[1]
@@ -478,6 +486,8 @@ def pipeline(slug: str | None = None) -> dict[str, Any]:
                     "campaign": s, "campaign_name": brief.name, "creator": brief.creator, "video_id": vid,
                     "clip_id": int(cid), "title": post.get("title", ""), "hook": post.get("hook", ""),
                     "duration": post.get("duration"), "status": status, "compliance": post.get("compliance"),
+                    "safety": post.get("safety"),
+                    "vod_start": (post.get("source") or {}).get("vod_start"),  # pour « décaler le début »
                     "caption": caption_path.read_text(encoding="utf-8") if caption_path.exists() else "",
                     "thumbnail": rel(meta_path.with_suffix(".jpg")), "video": rel(meta_path.with_suffix(".mp4")),
                     "posts": posts, "views": views, "estimate": round(est, 2), "paid": round(paid, 2),

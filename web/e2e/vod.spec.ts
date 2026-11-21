@@ -24,7 +24,24 @@ test("VOD inconnue", async ({ page }) => {
 test("nouvelle VOD : URL refusée tant qu'elle n'est pas une VOD Kick, Twitch ou YouTube", async ({ page }) => {
   await page.goto("/vod/new");
   await page.getByLabel("URL de la VOD").fill("https://example.com/video");
-  await page.getByRole("button", { name: "Analyser" }).click();
+  await page.getByRole("button", { name: "Analyser", exact: true }).click();
   await expect(page.getByText("Colle l'URL d'une VOD Kick, Twitch ou YouTube")).toBeVisible();
   await expect(page).toHaveURL(/\/vod\/new/);
+});
+
+test("lot : plusieurs URL → une analyse par VOD, dans l'ordre (API simulée)", async ({ page }) => {
+  const posted: string[] = [];
+  await page.route(`${API}/api/campaigns/test-fr/vods`, async (route) => {
+    posted.push((route.request().postDataJSON() as { url: string }).url);
+    await route.fulfill({ status: 202, json: { job: { id: posted.length, status: "queued", video_id: null }, source_rule: "" } });
+  });
+  await page.goto("/vod/new?campaign=test-fr");
+  const box = page.getByLabel("Plusieurs URL, une par ligne");
+  await box.fill("https://www.twitch.tv/videos/111\nhttps://example.com/x\nhttps://kick.com/demo/videos/abc");
+  await expect(page.getByText(/Pas une VOD Kick, Twitch ou YouTube : https:\/\/example.com\/x/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Analyser les 3 VOD/ })).toBeDisabled();
+  await box.fill("https://www.twitch.tv/videos/111\nhttps://kick.com/demo/videos/abc\nhttps://www.twitch.tv/videos/111");
+  await page.getByRole("button", { name: "Analyser les 2 VOD" }).click(); // doublon retiré
+  await expect(page.getByText("2 analyses en file")).toBeVisible();
+  expect(posted).toEqual(["https://www.twitch.tv/videos/111", "https://kick.com/demo/videos/abc"]);
 });

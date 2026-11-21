@@ -14,6 +14,42 @@ import { cn } from "@/lib/utils";
 
 const SOURCE_RE = /^https?:\/\/(www\.|m\.)?(kick\.com|twitch\.tv|youtube\.com|youtu\.be)\//i;
 
+/** Lot : plusieurs URL (une par ligne) → une analyse par VOD, mises en file (une à la fois sur cette machine). */
+export function BatchForm({ campaign, disabledReason }: { campaign?: string; disabledReason?: string }) {
+  const [text, setText] = useState("");
+  const router = useRouter();
+  const client = useQueryClient();
+  const urls = [...new Set(text.split(/\s+/).map((u) => u.trim()).filter(Boolean))];
+  const invalid = urls.filter((u) => !SOURCE_RE.test(u));
+  const submit = useMutation({
+    mutationFn: async () => {
+      for (const url of urls) await post(`/api/campaigns/${campaign}/vods`, { url }); // dans l'ordre collé
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["jobs"] });
+      toast.success(`${urls.length} analyse${urls.length > 1 ? "s" : ""} en file`, { description: "Elles s'enchaînent seules, une à la fois." });
+      setText("");
+      router.push("/vod");
+    },
+    onError: (e) => toast.error(e.message, { duration: 8000 }),
+  });
+  const blocked = !campaign ? "Choisis d'abord la campagne" : disabledReason;
+  return (
+    <div>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} aria-label="Plusieurs URL, une par ligne"
+                placeholder={"https://www.twitch.tv/videos/…\nhttps://kick.com/…/videos/…"}
+                className={cn("w-full rounded-2xl border bg-secondary/60 px-4 py-3 font-mono text-sm outline-none focus:border-blue",
+                  invalid.length ? "border-pink" : "border-line")} />
+      {invalid.length > 0 && <p className="mt-1 text-sm text-pink">Pas une VOD Kick, Twitch ou YouTube : {invalid.join(", ")}</p>}
+      <button type="button" title={blocked} disabled={submit.isPending || urls.length < 2 || invalid.length > 0 || !!blocked}
+              onClick={() => submit.mutate()}
+              className="mt-3 h-12 rounded-2xl bg-ink px-5 font-semibold text-yellow disabled:opacity-40">
+        {submit.isPending ? "Envoi…" : `Analyser ${urls.length >= 2 ? `les ${urls.length} VOD` : "le lot"}`}
+      </button>
+    </div>
+  );
+}
+
 export function AnalyzeForm({ campaign, disabledReason }: { campaign?: string; disabledReason?: string }) {
   const [url, setUrl] = useState("");
   const router = useRouter();

@@ -31,7 +31,7 @@ def save_edit(vid: str, window: int, **changes: Any) -> dict[str, Any]:
     """Met à jour les réglages d'un moment. Une valeur None efface le réglage (retour au défaut)."""
     checks = {"decision": DECISIONS, "layout": LAYOUTS, "style": STYLES}
     for key, value in changes.items():
-        if key not in {"decision", "layout", "style", "hook", "start", "end", "corrections"}:
+        if key not in {"decision", "layout", "style", "hook", "start", "end", "corrections", "zoom"}:
             raise ValueError(f"réglage inconnu : {key}")
         if (
             key == "corrections"
@@ -41,6 +41,8 @@ def save_edit(vid: str, window: int, **changes: Any) -> dict[str, Any]:
             raise ValueError("corrections attend {début du mot (s): texte corrigé}")
         if key in checks and value is not None and value not in checks[key]:
             raise ValueError(f"{key} invalide {value!r} : {', '.join(checks[key])}")
+        if key == "zoom" and value is not None and not (isinstance(value, int | float) and 1.0 <= value <= 1.10):
+            raise ValueError("zoom attendu entre 1,00 et 1,10 (variation anti-doublon)")
         if key == "hook" and value is not None and len(value) > 80:
             raise ValueError("accroche trop longue (80 caractères max)")
     edits = load_edits(vid)
