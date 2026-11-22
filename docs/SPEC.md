@@ -561,3 +561,7 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
   un bouton par plateforme du brief → légende copiée, page d'envoi officielle ouverte dans le navigateur (session déjà
   connectée : tiktok.com/tiktokstudio/upload, youtube.com/upload, instagram.com puis « Créer »), Explorateur ouvert
   sur le clip (`POST /api/clips/<campagne>/<vod>/<n>/reveal`, clip rendu seulement). On publie, puis on colle l'URL.
+- **Interface hébergée (Vercel), 2026-11-22** : seule l'interface (`web/`) est en ligne ; le calcul reste sur le PC,
+  donc la page ne marche que PC allumé et `qclip serve` lancé. L'API n'accepte que `localhost:3000` et les adresses
+  https listées dans `config.yaml` → `web_origins` ; elle répond à la vérification « réseau local » de Chrome
+  (`allow_private_network`), Chrome demande une autorisation à la première visite. `next build` validé en local.

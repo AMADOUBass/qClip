@@ -170,3 +170,26 @@ def test_reveal_opens_only_existing_rendered_clips(client: TestClient, monkeypat
     r = client.post("/api/clips/test-fr/twitch-9/3/reveal")
     assert r.status_code == 200 and r.json()["file"] == "clip_3.mp4" and opened == [vid / "renders" / "clip_3.mp4"]
     assert client.post("/api/clips/..%2Fx/twitch-9/3/reveal").status_code in {400, 404}  # slug refusé
+
+
+def test_hosted_interface_origin_is_allowed_only_if_listed() -> None:
+    """Interface sur Vercel : seule l'adresse listée dans web_origins peut appeler l'API de ce PC."""
+    app = TestClient(create_app(JobQueue(), origins=["https://qclip-demo.vercel.app"]))
+    preflight = {"Access-Control-Request-Method": "GET", "Access-Control-Request-Private-Network": "true"}
+    ok = app.options("/api/system", headers={"Origin": "https://qclip-demo.vercel.app", **preflight})
+    assert ok.status_code == 200
+    assert ok.headers["access-control-allow-origin"] == "https://qclip-demo.vercel.app"
+    assert ok.headers["access-control-allow-private-network"] == "true"
+    other = app.options("/api/system", headers={"Origin": "https://site-quelconque.com", **preflight})
+    assert other.status_code == 400 and "access-control-allow-origin" not in other.headers
+
+
+def test_web_origins_must_be_https() -> None:
+    from qclip.config import Config, load_config
+
+    data = load_config().model_dump()
+    assert Config.model_validate({**data, "web_origins": ["https://qclip.vercel.app"]}).web_origins
+    with pytest.raises(ValueError):
+        Config.model_validate({**data, "web_origins": ["http://qclip.vercel.app"]})
+    with pytest.raises(ValueError):
+        Config.model_validate({**data, "web_origins": ["*"]})

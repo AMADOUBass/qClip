@@ -1,7 +1,7 @@
 """Config globale (config.yaml) : modèles pydantic, chargement YAML et messages d'erreur lisibles."""
 
 from pathlib import Path
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -109,6 +109,8 @@ class Config(StrictModel):
     llm: LlmConfig
     render: RenderConfig
     subtitle: SubtitleConfig
+    # Interface hébergée ailleurs (ex. Vercel) qui parle à l'API de ce PC : adresses exactes autorisées, en https.
+    web_origins: list[Annotated[str, Field(pattern=r"^https://[A-Za-z0-9.-]+(:\d+)?$")]] = Field(default_factory=list)
 
 
 def read_yaml(path: Path) -> dict[str, Any]:

@@ -16,3 +16,5 @@ features: { clap: true, scenes: true }
 llm: { use_llm: false, use_vision: false, text_model: "qwen3.5:4b-q4_K_M", vision_model: "qwen3.5:4b-q4_K_M" }   # 4B à la demande : accroches (éditeur, ≈ 1 min 30), images (qclip safety --vision, ≈ 2,5 min / clip)
 render: { layout: facecam, fps: 30, encoder: auto, lufs: -14, zoom: 1.02 }   # zoom : variation anti-doublon (1,00-1,10)
 subtitle: { font: "Montserrat ExtraBold", size: 90, color: "#FFFFFF", highlight: "#FFD400", outline: 6, words_per_line: 3, uppercase: true }
+# Interface hébergée (ex. Vercel) autorisée à parler à l'API de ce PC : adresses exactes en https, ex. ["https://qclip.vercel.app"]
+web_origins: ["https://q-clip.vercel.app"]

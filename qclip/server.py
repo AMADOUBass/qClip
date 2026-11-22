@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from qclip import ROOT, overview
 from qclip.campaign import ASSETS_DIR, load_campaign, save_brief
-from qclip.config import ConfigError
+from qclip.config import ConfigError, load_config
 from qclip.edits import correct_everywhere, load_edits, save_edit, word_key
 from qclip.jobs import JobQueue
 from qclip.posts import log_post
@@ -78,15 +78,18 @@ def campaign_of(vid: str) -> str:
     return json.loads((WORK_DIR / vid / "scout.json").read_text(encoding="utf-8"))["campaign"]
 
 
-def create_app(queue: JobQueue | None = None) -> FastAPI:
+def create_app(queue: JobQueue | None = None, origins: list[str] | None = None) -> FastAPI:
     app = FastAPI(title="qClip", version="0.1.0")
     jobs = queue or JobQueue()
     app.state.jobs = jobs
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        # Interface locale + celles hébergées listées dans config.yaml (web_origins) ; tout autre site reste refusé.
+        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", *(origins or load_config().web_origins)],
         allow_methods=["*"],
         allow_headers=["*"],
+        # Chrome demande l'accord de ce PC quand un site public (ex. Vercel) appelle 127.0.0.1 (« réseau local »).
+        allow_private_network=True,
     )
 
     @app.exception_handler(ConfigError)
