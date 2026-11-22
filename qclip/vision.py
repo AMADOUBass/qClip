@@ -41,9 +41,11 @@ class VisionVerdict(BaseModel):
 
 
 def frame(clip: Path, t: float, out: Path) -> Path:
-    """Une image du clip à l'instant t, réduite à FRAME_WIDTH de large (JPEG)."""
+    """Une image du clip à l'instant t, réduite à FRAME_WIDTH de large (JPEG). t = 0 : aucun saut, ce qui permet
+    aussi de lire une image fixe (miniature) : ffmpeg n'écrit rien, sans erreur, si on « saute » dans une image."""
+    seek = ["-ss", f"{t:.2f}"] if t > 0 else []
     result = subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", "-ss", f"{t:.2f}", "-i", str(clip), "-frames:v", "1",
+        ["ffmpeg", "-y", "-v", "error", *seek, "-i", str(clip), "-frames:v", "1",
          "-vf", f"scale={FRAME_WIDTH}:-2", "-q:v", "4", str(out)],
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, check=False,
     )  # fmt: skip

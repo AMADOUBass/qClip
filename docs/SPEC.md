@@ -530,3 +530,15 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     l'ordre, une à la fois.
   - **Bug trouvé et corrigé** : le pipeline lisait tous les `clip_*.json`, y compris le nouveau `clip_3.safety.json`
     → `/api/clips` (pipeline et accueil) plantait. Ne lit plus que `clip_<n>.json` ; test de non-régression.
+- **Vision (suite de M6), 2026-11-22**
+  - `qclip/vision.py` : 8 images (7 dans les 7 premières secondes + la miniature, 384 px) → Ollama en une requête,
+    réponse JSON imposée (violence graphique, gore, images concernées, confiance, description FR) ; modèle déchargé
+    après (`keep_alive=0`). `qclip bench-vision <clip>` compare des modèles.
+  - Mesuré (VOD de test, Just Chatting, ≈ 2 Go de RAM libre) : 2B **89 s**, 4B **158-241 s** par clip ; les deux
+    répondent juste (pas de violence, description correcte). 4B retenu (`llm.vision_model`, descriptions plus précises).
+  - **`use_vision: false` par défaut** : activé, il ajouterait ≈ 2,5-4 min par clip rendu (8 clips → l'objectif M7 de
+    30 min ne tient plus). À la demande sur les clips à poster : `qclip safety <campagne> --ids 1,3 --vision`.
+  - Verdict : images signalées (violence ou gore, confiance ≥ 0,6) → drapeau `image` (lisible par le pipeline,
+    l'éditeur et la CLI), pas de décalage automatique (début à régler à l'œil). `safety.vision` = verdict du modèle,
+    `{error}` si Ollama ou le modèle manquent (le verdict son + mots reste), `null` si non vérifié.
+  - **Bug corrigé** : la miniature n'était jamais lue (`-ss 0` sur une image fixe → ffmpeg n'écrit rien, code 0).

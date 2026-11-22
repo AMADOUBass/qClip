@@ -357,11 +357,18 @@ def clip_safety(
 
         try:
             vision = check_images(clip, thumbnail, vision_model)
-            verdict["vision"] = vision
-            if vision["flagged"]:
-                verdict["ok"] = False
-        except RuntimeError as e:
+        except RuntimeError as e:  # Ollama arrêté, modèle absent… : le verdict son + mots reste valable
             verdict["vision"] = {"error": str(e)}
+            return verdict
+        verdict["vision"] = vision
+        if vision["flagged"]:
+            # Un drapeau lisible comme les autres (pipeline, éditeur, CLI). Les images ne datent l'évènement qu'à
+            # la seconde près : pas de décalage automatique, le début se règle à l'œil dans l'éditeur.
+            verdict["ok"] = False
+            verdict["flags"].append(
+                {"kind": "image", "at": (vision["at"] or [0.0])[0], "detail": vision["description"]}
+            )
+            verdict["shift_s"] = None
     return verdict
 
 

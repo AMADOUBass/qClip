@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uvx ruff format --quiet ."
+            "command": "PATH=\"$HOME/.local/bin:$PATH\" uvx ruff format --quiet ."
           }
         ]
       }
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uvx ruff check --quiet . 1>&2 || exit 2"
+            "command": "PATH=\"$HOME/.local/bin:$PATH\" uvx ruff check --quiet . 1>&2 || exit 2"
           }
         ]
       }

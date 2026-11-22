@@ -230,17 +230,20 @@ export function EditorView({ data, moments }: { data: EditorData; moments: Momen
   );
 }
 
+const FLAG_LABEL = { "gros mot": "Gros mot", violence: "Son violent", image: "Image violente" } as const;
+
 /** Risque de démonétisation (safety.py) : ce qui est dit / entendu dans les 7 premières secondes, et le correctif. */
 function SafetyAlert({ data, pending, onShift }: { data: EditorData; pending: boolean; onShift: (s: number) => void }) {
   const s = data.safety;
-  const what = s.flags.map((f) => `${f.kind === "gros mot" ? "Gros mot" : "Son violent"} « ${f.detail} » à ${clock(f.at)}`);
+  const what = s.flags.map((f) => `${FLAG_LABEL[f.kind]} « ${f.detail} » à ${clock(f.at)}`);
+  const checked = !!s.vision && !("error" in s.vision);
   return (
     <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl border border-orange/30 bg-orange-soft px-5 py-4" role="alert">
       <TriangleAlert className="size-5 shrink-0 text-orange" />
       <p className="min-w-0 flex-1">
         <span className="font-semibold text-orange">{[...new Set(what)].slice(0, 3).join(" · ")}</span>
         <span className="block text-sm text-muted-foreground">
-          {s.rule}{s.vision ? "" : " Images non vérifiées : regarde aussi le début."}
+          {s.rule}{checked ? "" : " Images non vérifiées : regarde aussi le début."}
         </span>
       </p>
       {s.shift_s != null ? (

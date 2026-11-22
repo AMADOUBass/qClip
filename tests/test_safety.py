@@ -1,4 +1,7 @@
+import shutil
+
 import numpy as np
+import pytest
 
 from qclip.safety import FIRST_SECONDS, check, events
 
@@ -32,3 +35,45 @@ def test_violent_sounds_but_not_car_crash() -> None:
     assert verdict["shift_s"] is not None and verdict["shift_s"] >= 4.0
     assert check(205.0 + 0.1, 230.0, found, min_len=15)["ok"]
     assert FIRST_SECONDS == 7.0
+
+
+def test_vision_verdict_adds_a_readable_flag(monkeypatch, tmp_path) -> None:
+    """Images violentes : drapeau « image » (lisible par le pipeline et l'éditeur), pas de décalage automatique."""
+    import json
+
+    import qclip.vision
+    from qclip import render
+
+    windows = tmp_path / "vid" / "windows"
+    windows.mkdir(parents=True)
+    (windows / "windows.json").write_text(json.dumps([{"rank": 1, "start": 100.0, "duration": 85.0}]), "utf-8")
+    monkeypatch.setattr("qclip.sources.WORK_DIR", tmp_path)
+    c = {"window": 1, "start": 110.0, "end": 140.0}
+    words = [word("putain", 112.0)]
+
+    seen = {"flagged": True, "at": [2.5], "description": "une bagarre avec du sang", "seconds": 90.0}
+    monkeypatch.setattr(qclip.vision, "check_images", lambda clip, thumb, model: seen)
+    v = render.clip_safety("vid", c, words, LABELS, 15, clip=tmp_path / "c.mp4", vision_model="m")
+    assert not v["ok"] and v["vision"] is seen and v["shift_s"] is None
+    assert v["flags"][-1] == {"kind": "image", "at": 2.5, "detail": "une bagarre avec du sang"}
+
+    def down(clip, thumb, model):
+        raise RuntimeError("Ollama injoignable")
+
+    monkeypatch.setattr(qclip.vision, "check_images", down)
+    v = render.clip_safety("vid", c, words, LABELS, 15, clip=tmp_path / "c.mp4", vision_model="m")
+    assert v["vision"] == {"error": "Ollama injoignable"} and v["shift_s"] == 2.5  # le verdict son + mots reste
+    assert render.clip_safety("vid", c, [], LABELS, 15)["vision"] is None  # images non vérifiées
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg absent")
+def test_vision_frame_reads_a_still_thumbnail(tmp_path) -> None:
+    """Bug trouvé en M6 : `-ss 0` sur une image fixe → ffmpeg n'écrit rien (code 0) → miniature jamais vérifiée."""
+    from qclip.utils.ffmpeg import run
+    from qclip.vision import frame
+
+    thumb = tmp_path / "clip.jpg"
+    assert run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=red:s=1080x1920", "-frames:v", "1",
+                thumb]).returncode == 0  # fmt: skip
+    out = frame(thumb, 0, tmp_path / "out.jpg")
+    assert out.exists() and out.stat().st_size > 0

@@ -64,7 +64,7 @@ def check(start: float, end: float, found: list[dict[str, Any]], min_len: float)
             {"kind": e["kind"], "at": round(max(0.0, e["start"] - start), 1), "detail": e["detail"]} for e in flags
         ],
         "shift_s": shift,  # None : aucun décalage possible sans passer sous la durée minimale
-        "vision": False,  # images non vérifiées (LLM vision désactivé) : revue humaine
+        "vision": None,  # verdict du LLM vision (render.clip_safety) ; None = images non vérifiées : revue humaine
     }
 
 

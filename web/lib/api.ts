@@ -90,9 +90,10 @@ export type ComplianceCheck = { name: string; ok: boolean; detail: string };
 export type Safety = {
   ok: boolean;
   rule: string;
-  flags: { kind: "gros mot" | "violence"; at: number; detail: string }[];
+  flags: { kind: "gros mot" | "violence" | "image"; at: number; detail: string }[];
   shift_s: number | null; // décalage du début qui rend le clip sûr (null : impossible sans passer sous la durée min)
-  vision: boolean;
+  // Verdict du LLM vision (qclip safety --vision) ; null = images non vérifiées.
+  vision: { flagged: boolean; description: string; confidence: number; seconds: number } | { error: string } | null;
 };
 
 export type PipelineItem = {

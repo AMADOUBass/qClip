@@ -141,7 +141,8 @@ function SafetyFix({ clip }: { clip: PipelineItem }) {
   return (
     <div>
       <p>
-        {first.kind === "gros mot" ? `Gros mot « ${first.detail} »` : `Son violent (${first.detail})`} à {clock(first.at)}
+        {first.kind === "gros mot" ? `Gros mot « ${first.detail} »` : first.kind === "image" ? `Image violente (${first.detail})`
+          : `Son violent (${first.detail})`} à {clock(first.at)}
         {s.flags.length > 1 && ` (+ ${s.flags.length - 1})`} — dans les 7 premières secondes, YouTube limite la pub.
       </p>
       {s.shift_s != null && clip.window != null && clip.vod_start != null ? (

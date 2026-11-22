@@ -309,16 +309,8 @@ def bench_vision_cmd(
     except USER_ERRORS as e:
         raise fail(e) from e
     table = Table(title=f"bench-vision — {clip.name}")
-    for col, just in [
-        ("Modèle", "left"),
-        ("Violent", "left"),
-        ("Gore", "left"),
-        ("Signalé", "left"),
-        ("Confiance", "right"),
-        ("Temps", "right"),
-        ("Description", "left"),
-    ]:
-        table.add_column(col, justify=just)
+    for col in ["Modèle", "Violent", "Gore", "Signalé", "Confiance", "Temps", "Description"]:
+        table.add_column(col, justify="right" if col in {"Confiance", "Temps"} else "left")
     for r in results:
         table.add_row(
             r.model,
@@ -439,11 +431,16 @@ def safety(
     campaign: Annotated[str, typer.Argument(help="Slug de la campagne")],
     video: Annotated[str | None, typer.Option(help="video_id (work/<video_id>/)")] = None,
     ids: Annotated[str | None, typer.Option(help="Clips, ex. 1,3 (défaut : tous les clips rendus)")] = None,
+    vision: Annotated[
+        bool | None,
+        typer.Option(help="Vérifier aussi les images avec le LLM vision (≈ 1,5-2,5 min par clip ; défaut : config)"),
+    ] = None,
 ) -> None:
-    """Risque de démonétisation des clips rendus : gros mots ou sons violents dans les 7 premières secondes."""
+    """Risque de démonétisation des clips rendus : gros mots, sons violents (et images avec --vision) au début."""
     try:
         wanted = {int(x) for x in ids.split(",") if x.strip()} if ids else None
         config, brief = load_config(), load_campaign(campaign)
+        use_vision = config.llm.use_vision if vision is None else vision
         for vid in campaign_videos(campaign, video):
             out_dir = WORK_DIR / vid / "renders" if brief.test_only else ROOT / "output" / campaign / vid
             edits = load_edits(vid)
@@ -460,10 +457,15 @@ def safety(
                     words,
                     config.audio_event_labels,
                     brief.clip.min_len,
-                    clip=clip if config.llm.use_vision else None,
-                    thumbnail=clip.with_suffix(".jpg") if config.llm.use_vision else None,
-                    vision_model=config.llm.vision_model if config.llm.use_vision else None,
+                    clip=clip if use_vision else None,
+                    thumbnail=clip.with_suffix(".jpg") if use_vision else None,
+                    vision_model=config.llm.vision_model if use_vision else None,
                 )
+                seen = verdict.get("vision") or {}
+                if seen.get("error"):
+                    console.print(f"⚠️  clip {c['id']} — images non vérifiées : {seen['error']}", soft_wrap=True)
+                elif seen:
+                    console.print(f"   clip {c['id']} — images ({seen['seconds']} s) : {seen['description']}")
                 clip.with_suffix(".safety.json").write_text(json.dumps(verdict, ensure_ascii=False, indent=2), "utf-8")
                 post_path = clip.with_suffix(".json")
                 if post_path.exists():  # le pipeline lit le verdict dans clip_<n>.json
