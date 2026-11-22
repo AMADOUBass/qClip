@@ -175,8 +175,8 @@ def check_disk() -> Check:
 
 
 def check_sample() -> Check:
-    if not SAMPLE.exists():
-        return Check("input/sample.mp4", "warn", "absent — y déposer 5 min d'une VOD de campagne")
+    if not SAMPLE.exists():  # facultatif depuis le ménage du 2026-11-22 : on valide sur une vraie VOD de campagne
+        return Check("input/sample.mp4", "ok", "absent (facultatif) — 5 min d'une VOD de campagne pour un test rapide")
     if ffmpeg.find_tool("ffprobe") is None:
         return Check("input/sample.mp4", "warn", "présent, mais ffprobe absent : impossible de l'analyser")
     try:

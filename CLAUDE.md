@@ -14,7 +14,8 @@ le lire avant chaque jalon, et le mettre à jour quand une décision change.
 - Interface (M8) : API `uv run qclip serve` (127.0.0.1:8766) + front `cd web && pnpm dev` (http://localhost:3000)
   - Sans terminal : double-clic sur `lancer-qclip.cmd` (lance ce qui ne tourne pas déjà, puis ouvre le navigateur)
   - Front : `pnpm exec tsc --noEmit`, `pnpm lint`, `pnpm exec playwright test` (API et front lancés)
-- Vidéo de test : `input/sample.mp4` (5 min d'une VOD de campagne). Toujours valider dessus avant une longue VOD.
+- Vidéo de test : aucune pour l'instant (supprimée pour alléger le projet). Avant une longue VOD, valider sur une
+  courte VOD de campagne, ou déposer 5 min d'une VOD de campagne dans `input/sample.mp4` (facultatif, vu par `doctor`).
 - Aucun téléchargement ni traitement de contenu qui n'est pas rattaché à une campagne (`campaigns/<slug>.yaml`).
 
 # Git

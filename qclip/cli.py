@@ -297,9 +297,7 @@ def bench_sep_cmd(
 @app.command("bench-vision")
 def bench_vision_cmd(
     clip: Annotated[Path, typer.Argument(help="Clip rendu (ex. output/<campagne>/<vid>/clip_1.mp4)")],
-    models: Annotated[
-        str, typer.Option(help="Modèles Ollama vision séparés par des virgules")
-    ] = "qwen3.5:2b-q4_K_M,qwen3.5:4b-q4_K_M",
+    models: Annotated[str, typer.Option(help="Modèles Ollama vision séparés par des virgules")] = "qwen3.5:4b-q4_K_M",
     thumbnail: Annotated[Path | None, typer.Option(help="Miniature JPEG (optionnel)")] = None,
 ) -> None:
     """Compare des modèles vision Ollama sur les 7 premières secondes d'un clip : temps et verdict de démonétisation."""

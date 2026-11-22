@@ -552,3 +552,7 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     `llm.text_model` = 4B.
 - **Port de l'API : 8766** (au lieu de 8765), 2026-11-22 — un autre programme de la machine (`firetv_link.py`) occupe
   8765 et empêchait `qclip serve` de démarrer. API, client web (`NEXT_PUBLIC_QCLIP_API`), tests e2e, lanceur.
+- **Ménage, 2026-11-22** (≈ 9,2 Go libérés) : VOD de test et ses 8 clips, `input/sample.mp4` (désormais facultatif pour
+  `doctor`), modèles abandonnés (Qwen3-ASR + aligneur, faster-whisper small, MelBand RoFormer, Kim_Vocal_2), Ollama 2B
+  (le 4B sert aux images et aux accroches), cache `web/.next`, ffmpeg « essentials » en double. Gardés : Parakeet,
+  Silero, CLAP, YuNet, UVR-MDX-NET-Voc_FT (si la séparation est activée), Ollama 4B.
