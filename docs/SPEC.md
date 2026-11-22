@@ -556,3 +556,8 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
   `doctor`), modèles abandonnés (Qwen3-ASR + aligneur, faster-whisper small, MelBand RoFormer, Kim_Vocal_2), Ollama 2B
   (le 4B sert aux images et aux accroches), cache `web/.next`, ffmpeg « essentials » en double. Gardés : Parakeet,
   Silero, CLAP, YuNet, UVR-MDX-NET-Voc_FT (si la séparation est activée), Ollama 4B.
+- **Publication en un clic, 2026-11-22** (sans API : celles de TikTok, Instagram et YouTube exigent une app validée,
+  sinon les posts restent privés ; Instagram veut en plus la vidéo à une adresse web publique). Pipeline, clip rendu :
+  un bouton par plateforme du brief → légende copiée, page d'envoi officielle ouverte dans le navigateur (session déjà
+  connectée : tiktok.com/tiktokstudio/upload, youtube.com/upload, instagram.com puis « Créer »), Explorateur ouvert
+  sur le clip (`POST /api/clips/<campagne>/<vod>/<n>/reveal`, clip rendu seulement). On publie, puis on colle l'URL.

@@ -5,7 +5,7 @@
 // posté → vues / estimation, saisie des vues et du paiement ; payé → vues et montant payé.
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, TriangleAlert, X } from "lucide-react";
+import { Check, Copy, ExternalLink, Send, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -157,17 +157,50 @@ function SafetyFix({ clip }: { clip: PipelineItem }) {
   );
 }
 
-/** Rendu, pas encore posté : copier la légende, puis coller l'URL du post pour chaque plateforme. */
+/** Pages d'envoi officielles (tu y es déjà connecté dans ton navigateur) : aucune API, posts publics tout de suite. */
+const UPLOAD: Record<Platform, { label: string; url: string; tip: string }> = {
+  tiktok: { label: "TikTok", url: "https://www.tiktok.com/tiktokstudio/upload", tip: "glisse le clip dans la page" },
+  shorts: { label: "YouTube Shorts", url: "https://www.youtube.com/upload", tip: "glisse le clip : vertical et court, YouTube en fait un Short" },
+  reels: { label: "Instagram Reels", url: "https://www.instagram.com/", tip: "clique sur « Créer » (+), puis glisse le clip" },
+};
+
+/** Rendu, pas encore posté : publication en un clic par plateforme, puis l'URL du post pour le suivi. */
 function Publish({ clip }: { clip: PipelineItem }) {
   const copy = () =>
     navigator.clipboard.writeText(clip.caption).then(
       () => toast.success("Légende copiée", { description: clip.caption.split("\n").find(Boolean) }),
       () => toast.error("Copie impossible (permission du navigateur)"),
     );
+  // Un clic : légende copiée (avant d'ouvrir l'onglet, tant que la page a le focus), page d'envoi ouverte,
+  // Explorateur ouvert sur le clip pour le glisser dans la page.
+  const publish = (p: Platform) => {
+    const copied = navigator.clipboard.writeText(clip.caption);
+    window.open(UPLOAD[p].url, "_blank", "noopener");
+    const shown = post<{ file: string }>(`/api/clips/${clip.campaign}/${clip.video_id}/${clip.clip_id}/reveal`, {});
+    Promise.allSettled([copied, shown]).then(([c, s]) => {
+      toast.success(`${UPLOAD[p].label} ouvert`, {
+        description: [
+          c.status === "fulfilled" ? "légende copiée" : "copie de la légende impossible (bouton ci-dessus)",
+          s.status === "fulfilled" ? `${s.value.file} sélectionné dans l'Explorateur` : "dossier du clip introuvable",
+          UPLOAD[p].tip,
+          "puis colle l'URL du post ici",
+        ].join(" · "),
+        duration: 15000,
+      });
+    });
+  };
   return (
     <div className="mt-4 space-y-2">
-      <button type="button" onClick={copy} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-yellow font-semibold">
-        <Copy className="size-4" /> Copier la légende
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${clip.platforms.length}, minmax(0, 1fr))` }}>
+        {clip.platforms.map((p) => (
+          <button key={p} type="button" onClick={() => publish(p)}
+                  className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-yellow px-2 text-sm font-semibold">
+            <Send className="size-4 shrink-0" /> <span className="truncate">{UPLOAD[p].label}</span>
+          </button>
+        ))}
+      </div>
+      <button type="button" onClick={copy} className="flex h-9 w-full items-center justify-center gap-2 rounded-xl text-sm text-muted-foreground hover:text-ink">
+        <Copy className="size-4" /> Copier seulement la légende
       </button>
       {clip.platforms.map((p) => <UrlField key={p} clip={clip} platform={p} />)}
     </div>

@@ -1,5 +1,6 @@
 import json
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -151,3 +152,21 @@ def test_pipeline_reads_only_clip_meta_files(client: TestClient) -> None:
     assert not overview.CLIP_META_RE.fullmatch("clip_3.render.json")
     assert client.get("/api/clips").status_code == 200
     assert client.get("/api/dashboard").status_code == 200
+
+
+def test_reveal_opens_only_existing_rendered_clips(client: TestClient, monkeypatch, tmp_path) -> None:
+    """Publication en un clic : l'Explorateur ne s'ouvre que sur un clip rendu d'une VOD connue."""
+    from qclip import server
+
+    opened: list[Path] = []
+    monkeypatch.setattr(server, "show_in_explorer", opened.append)
+    assert client.post("/api/clips/test-fr/inconnue/1/reveal").status_code == 404  # VOD inconnue
+    vid = tmp_path / "twitch-9"
+    (vid / "renders").mkdir(parents=True)
+    (vid / "scout.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(server, "WORK_DIR", tmp_path)
+    assert client.post("/api/clips/test-fr/twitch-9/3/reveal").status_code == 404  # pas encore rendu
+    (vid / "renders" / "clip_3.mp4").write_bytes(b"x")
+    r = client.post("/api/clips/test-fr/twitch-9/3/reveal")
+    assert r.status_code == 200 and r.json()["file"] == "clip_3.mp4" and opened == [vid / "renders" / "clip_3.mp4"]
+    assert client.post("/api/clips/..%2Fx/twitch-9/3/reveal").status_code in {400, 404}  # slug refusé

@@ -18,10 +18,17 @@ function clip(status: string, posts: Record<string, { url: string; views: number
   };
 }
 
+const revealed: string[] = []; // appels « ouvrir l'Explorateur sur le clip »
+
 async function mockApi(page: Page) {
   const sent: Record<string, unknown>[] = [];
+  revealed.length = 0;
   let state = clip("rendu");
   await page.route(`${API}/api/clips**`, async (route: Route) => {
+    if (route.request().url().endsWith("/reveal")) {
+      revealed.push(new URL(route.request().url()).pathname);
+      return route.fulfill({ json: { file: "clip_3.mp4", folder: "output/demo/kick-1" } });
+    }
     if (route.request().method() === "POST") {
       const body = route.request().postDataJSON() as { platform: string; url?: string; views?: number; paid?: number };
       sent.push({ path: new URL(route.request().url()).pathname, ...body });
@@ -44,7 +51,14 @@ test("pipeline : copier, poster, saisir vues et paiement", async ({ page, contex
   const rendu = page.getByRole("region", { name: "Rendu" });
   await expect(rendu.getByText("Il a rien vu venir")).toBeVisible();
 
-  await rendu.getByRole("button", { name: "Copier la légende" }).click();
+  // Publication en un clic : légende copiée, page d'envoi TikTok ouverte (bloquée ici), Explorateur demandé
+  await context.route("https://www.tiktok.com/**", (route) => route.fulfill({ body: "page d'envoi TikTok" }));
+  const [upload] = await Promise.all([context.waitForEvent("page"), rendu.getByRole("button", { name: "TikTok" }).click()]);
+  expect(upload.url()).toBe("https://www.tiktok.com/tiktokstudio/upload");
+  await upload.close();
+  await expect(page.getByText("TikTok ouvert")).toBeVisible();
+  await expect(page.getByText(/clip_3\.mp4 sélectionné dans l'Explorateur/)).toBeVisible();
+  expect(revealed).toEqual(["/api/clips/demo/kick-1/3/reveal"]);
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("@bichou #bichou");
 
   // Une URL invalide est refusée sans appel à l'API

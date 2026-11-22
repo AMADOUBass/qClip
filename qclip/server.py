@@ -7,6 +7,8 @@ Tâches longues dans la file `jobs` (une à la fois), suivies en direct par SSE 
 import asyncio
 import json
 import re
+import subprocess
+import sys
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -292,7 +294,27 @@ def create_app(queue: JobQueue | None = None) -> FastAPI:
         row = log_post(slug, f"{vid}/{clip_id}", body.platform, body.url, body.views, body.paid)
         return {"row": row}
 
+    @app.post("/api/clips/{slug}/{vid}/{clip_id}/reveal")
+    def reveal(slug: str, vid: str, clip_id: int) -> dict[str, Any]:
+        """Publication en un clic : ouvre l'Explorateur sur le clip, prêt à glisser dans la page d'envoi."""
+        check_vid(vid)
+        brief = load_campaign(slug)  # valide aussi le slug
+        out_dir = WORK_DIR / vid / "renders" if brief.test_only else ROOT / "output" / slug / vid
+        clip = out_dir / f"clip_{clip_id}.mp4"
+        if not clip.is_file():
+            raise FileNotFoundError(f"clip_{clip_id}.mp4 introuvable : le rendre d'abord")
+        show_in_explorer(clip)
+        return {"file": clip.name, "folder": str(clip.parent)}
+
     return app
+
+
+def show_in_explorer(path: Path) -> None:
+    """Ouvre le dossier du fichier, fichier sélectionné (Windows), sinon le dossier. Liste d'arguments, pas de shell."""
+    if sys.platform == "win32":
+        subprocess.Popen(["explorer", f"/select,{path}"])  # noqa: S603, S607 — explorer renvoie 1 même quand tout va bien
+    else:
+        subprocess.Popen(["xdg-open", str(path.parent)])  # noqa: S603, S607
 
 
 def serve(host: str = "127.0.0.1", port: int = 8766) -> None:
