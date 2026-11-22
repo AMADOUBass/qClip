@@ -67,6 +67,69 @@ def load_rerank(vid: str) -> dict[str, dict[str, Any]]:
 # Gros mots : une accroche ou un titre du LLM qui en contient est ignoré (retour au gabarit) → meta.is_clean.
 
 
+class Suggestions(BaseModel):
+    # Pas de max_length : un modèle qui en renvoie 4 ne doit pas tout faire échouer ; on garde les 3 premières valides.
+    hooks: list[str] = Field(min_length=1, description="3 accroches différentes, 3 à 8 mots chacune")
+    title: str = Field(description="titre du post, 60 caractères maximum")
+
+
+# Consigne de l'éditeur, plus stricte que PROMPT : le test du 4B (2026-11-22) inventait à partir des erreurs de
+# transcription (« camp de Daesh », « Big Day ») et prêtait des propos négatifs au créateur. Les propositions sont
+# montrées à l'utilisateur, qui choisit : rien n'est appliqué sans lui.
+SUGGEST_PROMPT = """Tu proposes des accroches pour un clip court (TikTok, Shorts) du streamer {creator}.
+Voici ce qu'il dit dans le clip ({duration:.0f} s), transcrit automatiquement (avec des erreurs) :
+\"\"\"{text}\"\"\"
+Signaux mesurés pendant le live : {reasons}.
+
+Règles strictes :
+- Utilise les mots et la situation du texte. N'invente aucun fait, aucun nom, aucun lieu, aucun événement.
+- Un mot qui n'a pas de sens dans la phrase est mal transcrit : ignore-le, ne le reprends jamais.
+- Ne prête jamais au streamer une insulte, une moquerie ou un propos négatif envers quelqu'un.
+- Aucun gros mot. Français correct.
+
+Réponds en JSON :
+- hooks : 3 accroches différentes, 3 à 8 mots, qui donnent envie de voir la suite (question, réaction, situation).
+- title : titre du post, 60 caractères max, commence par « {creator} »."""
+
+
+def suggest(creator: str, text: str, duration: float, reasons: list[str], model: str, steps: Steps) -> dict[str, Any]:
+    """Accroches et titre proposés par le LLM pour un moment (éditeur, à la demande). Modèle déchargé ensuite."""
+    from ollama import Client, ResponseError
+
+    client = Client(host=OLLAMA_HOST)
+    try:
+        installed = {m.model for m in client.list().models if m.model}
+    except Exception as e:  # serveur arrêté, port fermé…
+        raise RuntimeError(f"Ollama injoignable sur {OLLAMA_HOST} : lancer l'application Ollama ({e})") from e
+    if model not in installed and f"{model}:latest" not in installed:
+        raise RuntimeError(f"modèle {model!r} absent d'Ollama : `ollama pull {model}`")
+    prompt = SUGGEST_PROMPT.format(creator=creator, duration=duration, text=text[:1500],
+                                   reasons=", ".join(reasons) or "aucun")  # fmt: skip
+    try:
+        with steps.step(f"propositions d'accroche ({model})"):
+            response = client.chat(model=model, messages=[{"role": "user", "content": prompt}],
+                                   format=Suggestions.model_json_schema(), options={"temperature": 0.4},
+                                   think=False, keep_alive=0)  # fmt: skip
+    except ResponseError as e:
+        raise RuntimeError(f"erreur Ollama : {e}") from e
+    finally:
+        with contextlib.suppress(Exception):
+            client.chat(model=model, messages=[], keep_alive=0)  # décharge le modèle : rend la RAM
+    try:
+        raw = Suggestions.model_validate_json(response.message.content or "")
+    except ValidationError as e:
+        raise RuntimeError(f"réponse illisible du modèle ({e.error_count()} erreur(s)) : réessayer") from e
+    hooks: list[str] = []
+    for h in raw.hooks:
+        h = " ".join(h.strip().strip('"«»').split()[:8])
+        if h and is_clean(h) and h.lower() not in {x.lower() for x in hooks} and len(hooks) < 3:
+            hooks.append(h[:80])
+    title = raw.title.strip().strip('"«»')
+    title = title if len(title) <= 60 else title[:59].rsplit(" ", 1)[0] + "…"
+    return {"hooks": hooks, "title": title if is_clean(title) else "", "model": model,
+            "seconds": round(steps.timings.get(f"propositions d'accroche ({model})", 0.0), 1)}  # fmt: skip
+
+
 def clean(verdict: Verdict) -> dict[str, Any]:
     hook = " ".join(verdict.hook.strip().strip('"«»').split()[:8])
     title = verdict.title.strip().strip('"')

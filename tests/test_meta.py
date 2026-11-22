@@ -136,3 +136,43 @@ def test_paid_and_budget(campaign: str, monkeypatch: pytest.MonkeyPatch) -> None
     assert s.budget_left == pytest.approx(71.5)
     with pytest.raises(ConfigError, match="négatif"):
         posts.log_post(campaign, "3", "tiktok", None, None, paid=-1)
+
+
+def test_suggest_cleans_llm_proposals(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Accroches de l'éditeur : gros mots écartés, doublons retirés, 8 mots max, titre ≤ 60, modèle déchargé."""
+    import json
+    from types import SimpleNamespace
+
+    import ollama
+
+    from qclip.rerank import suggest
+    from qclip.steps import Steps
+
+    calls: list[dict] = []
+    answer = {
+        "hooks": [
+            "Il a rien vu venir",
+            "Quel enculé ce chat",
+            "il a rien vu venir",
+            "un deux trois quatre cinq six sept huit neuf dix",
+        ],
+        "title": "NoahLunsi " + "très " * 20,
+    }
+
+    class FakeClient:
+        def __init__(self, host: str) -> None: ...
+        def list(self):  # noqa: A003
+            return SimpleNamespace(models=[SimpleNamespace(model="qwen3.5:4b-q4_K_M")])
+
+        def chat(self, **kw):
+            calls.append(kw)
+            return SimpleNamespace(message=SimpleNamespace(content=json.dumps(answer)))
+
+    monkeypatch.setattr(ollama, "Client", FakeClient)
+    out = suggest("NoahLunsi", "texte du clip", 28.0, ["chat ×6.0"], "qwen3.5:4b-q4_K_M", Steps())
+    assert out["hooks"] == ["Il a rien vu venir", "un deux trois quatre cinq six sept huit"]
+    assert len(out["title"]) <= 60 and out["title"].endswith("…")
+    assert calls[0]["keep_alive"] == 0 and calls[-1]["messages"] == []  # déchargé après
+    monkeypatch.setattr(FakeClient, "list", lambda self: SimpleNamespace(models=[]))
+    with pytest.raises(RuntimeError, match="absent"):
+        suggest("NoahLunsi", "t", 20.0, [], "qwen3.5:4b-q4_K_M", Steps())

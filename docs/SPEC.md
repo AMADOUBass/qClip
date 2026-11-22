@@ -542,3 +542,11 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     l'éditeur et la CLI), pas de décalage automatique (début à régler à l'œil). `safety.vision` = verdict du modèle,
     `{error}` si Ollama ou le modèle manquent (le verdict son + mots reste), `null` si non vérifié.
   - **Bug corrigé** : la miniature n'était jamais lue (`-ss 0` sur une image fixe → ffmpeg n'écrit rien, code 0).
+- **Accroches proposées dans l'éditeur, 2026-11-22**
+  - Test du 4B pour le texte (16 moments, 46 s chacun) : formulations meilleures que le 2B, mais il **invente** à partir
+    des erreurs de transcription (« camp de Daesh », « Big Day »), prête des propos négatifs au créateur et note
+    presque tout 4/10 → **pas de rerank automatique** (`use_llm: false`), gabarits par défaut.
+  - Bouton « Proposer des accroches (4B) » dans l'éditeur (`POST /api/vods/<id>/moments/<plage>/suggest`, passe par
+    la file de tâches) : 3 accroches + un titre, consigne stricte (rien d'inventé, aucun propos négatif prêté),
+    filtre de gros mots ; **rien n'est appliqué sans un clic**. ≈ 1 min 30 chargement compris (mesuré : 91 s).
+    `llm.text_model` = 4B.

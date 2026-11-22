@@ -4,14 +4,15 @@
 // en direct, layout, style des sous-titres, accroche, rendu du clip. Réglages → work/<id>/edits.json.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Pause, Play, Smartphone, TriangleAlert } from "lucide-react";
+import { Check, Pause, Play, Smartphone, Sparkles, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Preview } from "@/components/editor/preview";
 import { PageHeader } from "@/components/page-header";
-import { type EditorData, type EditorWord, type Moments, type Peaks, type SubtitleStyle, api, media, post, put } from "@/lib/api";
+import { type EditorData, type EditorWord, type HookSuggestions, type Job, type Moments, type Peaks, type SubtitleStyle, api, media, post, put } from "@/lib/api";
+import { useJobs } from "@/lib/events";
 import { clock, eta } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -198,6 +199,7 @@ export function EditorView({ data, moments }: { data: EditorData; moments: Momen
             <p className="mt-2 text-sm text-muted-foreground">
               {data.hook_auto ? "Citation du clip choisie automatiquement · " : ""}affichée 3 s en haut · vide = automatique
             </p>
+            <SuggestHooks vid={vid} window={data.window} onPick={(h) => { setHook(h); save.mutate({ hook: h }); }} />
             <div className="mt-5">
               <div className="mb-2 flex justify-between text-muted-foreground">
                 <span>Variation anti-doublon (zoom)</span><span className="font-mono text-ink">{Math.round(zoom * 100)} %</span>
@@ -230,7 +232,46 @@ export function EditorView({ data, moments }: { data: EditorData; moments: Momen
   );
 }
 
-const FLAG_LABEL = { "gros mot": "Gros mot", violence: "Son violent", image: "Image violente" } as const;
+/** « Proposer » : le LLM (4B) suggère 3 accroches ; rien n'est appliqué sans un clic (il invente parfois). */
+function SuggestHooks({ vid, window, onPick }: { vid: string; window: number; onPick: (hook: string) => void }) {
+  const [jobId, setJobId] = useState<number | null>(null);
+  const { data: jobs } = useJobs();
+  const job = jobId != null ? jobs?.find((j) => j.id === jobId) : undefined;
+  const ask = useMutation({
+    mutationFn: () => post<{ job: Job }>(`/api/vods/${vid}/moments/${window}/suggest`, {}),
+    onSuccess: ({ job: j }) => setJobId(j.id),
+    onError: (e) => toast.error(e.message),
+  });
+  const busy = ask.isPending || job?.status === "queued" || job?.status === "running";
+  const result = job?.status === "done" ? (job.result as HookSuggestions) : null;
+  return (
+    <div className="mt-4">
+      <button type="button" onClick={() => ask.mutate()} disabled={busy}
+              className="flex h-10 items-center gap-2 rounded-xl border border-line bg-secondary px-4 text-sm font-medium disabled:opacity-60">
+        <Sparkles className="size-4" />
+        {busy ? (job?.status === "queued" ? "En file d'attente…" : "Le modèle réfléchit… (≈ 1 min 30)") : "Proposer des accroches (4B)"}
+      </button>
+      {job?.status === "error" && <p className="mt-2 text-sm text-pink">{job.error}</p>}
+      {result && (
+        <div className="mt-3">
+          <div className="flex flex-wrap gap-2">
+            {result.hooks.map((h) => (
+              <button key={h} type="button" onClick={() => onPick(h)}
+                      className="rounded-xl bg-yellow-soft px-3 py-1.5 text-left text-sm font-medium text-olive hover:bg-yellow">
+                {h}
+              </button>
+            ))}
+            {!result.hooks.length && <span className="text-sm text-muted-foreground">Aucune proposition utilisable (gros mots filtrés).</span>}
+          </div>
+          {result.title && <p className="mt-2 text-sm text-muted-foreground">Titre proposé : « {result.title} »</p>}
+          <p className="mt-1 text-xs text-muted-foreground">Propositions du modèle ({result.seconds} s) : vérifie qu&apos;elles collent au clip avant de choisir.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const FLAG_LABEL ={ "gros mot": "Gros mot", violence: "Son violent", image: "Image violente" } as const;
 
 /** Risque de démonétisation (safety.py) : ce qui est dit / entendu dans les 7 premières secondes, et le correctif. */
 function SafetyAlert({ data, pending, onShift }: { data: EditorData; pending: boolean; onShift: (s: number) => void }) {

@@ -251,6 +251,23 @@ def create_app(queue: JobQueue | None = None) -> FastAPI:
         save_edit(vid, window, corrections=current)
         return overview.editor(vid, window)
 
+    @app.post("/api/vods/{vid}/moments/{window}/suggest", status_code=202)
+    def suggest_hooks(vid: str, window: int) -> dict[str, Any]:
+        """Accroches proposées par le LLM (≈ 1 min 30 avec le 4B) : passe par la file, jamais pendant un rendu."""
+        from qclip.config import load_config
+        from qclip.rerank import suggest
+
+        check_vid(vid)
+        m = next((x for x in overview.moments(vid)["moments"] if x["window"] == window), None)
+        if m is None:
+            raise FileNotFoundError(f"moment {window} introuvable")
+        slug = campaign_of(vid)
+        creator, model = load_campaign(slug).creator, load_config().llm.text_model
+        text, duration, reasons = m["text"], m["duration"], m["reasons"]
+        job = jobs.submit("rerank", f"Accroches proposées ({model})", slug, video_id=vid,
+                          fn=lambda steps: suggest(creator, text, duration, reasons, model, steps))  # fmt: skip
+        return {"job": job.to_dict()}
+
     @app.post("/api/vods/{vid}/render", status_code=202)
     def render(vid: str, body: RenderBody) -> dict[str, Any]:
         from qclip.render import render_candidates

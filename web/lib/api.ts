@@ -49,7 +49,11 @@ export type Job = {
   logs: string[];
   error: string;
   elapsed_s: number;
+  result?: unknown; // ce que la tâche a renvoyé (ex. accroches proposées)
 };
+
+/** Accroches proposées par le LLM pour un moment (qclip/rerank.py · suggest). */
+export type HookSuggestions = { hooks: string[]; title: string; model: string; seconds: number };
 
 export type SystemStatus = {
   cpu_percent: number;
