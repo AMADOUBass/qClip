@@ -8,10 +8,13 @@ clips: { min_len: 15, max_len: 59, top_n: 8, preroll: 8.0, target_len: 30 }   # 
 weights: { chat: 2.0, loudness: 1.0, audio_events: 0.8, speech_energy: 1.0 }
 # Emotes / mots de rire ou de choc. Insensible à la casse et aux lettres répétées (« Wshhhh » = « wsh »).
 chat_emotes: ["KEKW", "LUL", "OMEGALUL", "LMAO", "💀", "W", "PogChamp", "Pog",
-              "🤣", "😂", "😭", "mdr", "ptdr", "wsh", "wesh", "ahah", "haha"]
+              "🤣", "😂", "😭", "mdr", "ptdr", "wsh", "wesh", "ahah", "haha", "lol", "omg", "bruh", "lmfao"]
 chat_bots: ["wizebot", "nightbot", "streamelements", "streamlabs", "moobot", "fossabot", "sery_bot", "botrixoficial"]
 audio_event_labels: ["people laughing", "person screaming", "explosion", "gunshots", "police siren", "car crash"]
-keywords: ["oh", "nan", "wesh", "c'est pas possible", "tabarnak", "wallah"]
+# Mots de réaction qui comptent dans le score, par langue du clip (brief.language).
+keywords:
+  fr: ["oh", "nan", "wesh", "c'est pas possible", "tabarnak", "wallah"]
+  en: ["oh my god", "no way", "let's go", "holy", "bro", "what the", "are you kidding"]
 features: { clap: true, scenes: true }
 llm: { use_llm: false, use_vision: false, text_model: "qwen3.5:4b-q4_K_M", vision_model: "qwen3.5:4b-q4_K_M" }   # 4B à la demande : accroches (éditeur, ≈ 1 min 30), images (qclip safety --vision, ≈ 2,5 min / clip)
 render: { layout: facecam, fps: 30, encoder: auto, lufs: -14, zoom: 1.02 }   # zoom : variation anti-doublon (1,00-1,10)

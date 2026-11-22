@@ -458,6 +458,7 @@ def safety(
                     clip=clip if use_vision else None,
                     thumbnail=clip.with_suffix(".jpg") if use_vision else None,
                     vision_model=config.llm.vision_model if use_vision else None,
+                    lang=brief.language,
                 )
                 seen = verdict.get("vision") or {}
                 if seen.get("error"):

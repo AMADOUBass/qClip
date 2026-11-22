@@ -366,8 +366,10 @@ def editor(vid: str, window: int) -> dict[str, Any]:
         image = ASSETS_DIR / scout["campaign"] / brief.overlay.file
         overlay = {**brief.overlay.model_dump(), "url": rel(image) if image.exists() else None}
     # m["hook"] = accroche de l'éditeur ou du rerank ; m["title"] = titre du rerank (déjà filtrés, voir moments()).
-    hook = m["hook"] or make_hook(inside, m["start"], config.keywords)
-    title = m["title"] or make_title(brief.creator, best_quote(inside, m["start"], config.keywords, 10), m["reasons"])
+    lang, keywords = brief.language, config.keywords_for(brief.language)
+    hook = m["hook"] or make_hook(inside, m["start"], keywords, lang)
+    quote = best_quote(inside, m["start"], keywords, 10, lang=lang)
+    title = m["title"] or make_title(brief.creator, quote, m["reasons"], lang)
     caption = make_caption(title, brief, make_hashtags(brief))
     check = compliance(brief, m["duration"], caption, title, overlay is not None and overlay["url"] is not None)
     return {
@@ -403,6 +405,7 @@ def editor(vid: str, window: int) -> dict[str, Any]:
             words,
             config.audio_event_labels,
             brief.clip.min_len,
+            lang=lang,
         ),  # fmt: skip
         "min_len": brief.clip.min_len,
         "max_len": brief.clip.max_len,

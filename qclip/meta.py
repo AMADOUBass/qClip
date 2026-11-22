@@ -10,12 +10,12 @@ import numpy as np
 
 from qclip.campaign import Brief
 from qclip.chat import normalize
+from qclip.lang import hashtags, is_clean, titles
 
 SENTENCE_END = (".", "?", "!", "…")
 HOOK_SECONDS = 3.0
 MAX_TITLE = 60
 MIN_HASHTAGS, MAX_HASHTAGS = 5, 8
-GENERIC_HASHTAGS = ["#fyp", "#pourtoi", "#twitch", "#clip", "#streamerfr", "#drole"]
 QUOTE_MIN_CONF = (
     0.75  # une citation n'est retenue que si l'ASR est sûr de ses mots (évite « Maybe like so bad action »)
 )
@@ -23,16 +23,7 @@ WORD_MIN_CONF = 0.45
 TEST_BANNER = "⚠️ TEST — NE PAS POSTER (campagne de test, contenu non autorisé)"
 
 
-# Gros mots : jamais dans une accroche ni un titre (gabarit ou LLM). Les sous-titres, eux, restent fidèles à la parole.
-PROFANITY = re.compile(
-    r"\b(encul\w*|put(e|ain)\w*|connard\w*|connasse|salop\w*|batard\w*|bâtard\w*|nique\w*|ntm|fdp|merde\w*"
-    r"|couilles?|bite|chatte|pd|tg|ta gueule)\b",
-    re.IGNORECASE,
-)
-
-
-def is_clean(text: str) -> bool:
-    return not PROFANITY.search(text)
+# Gros mots, hashtags génériques, titres par gabarit : par langue du clip, dans qclip/lang.py.
 
 
 @dataclass
@@ -69,7 +60,12 @@ def make_sentence(words: list[dict[str, Any]], clip_start: float) -> Sentence:
 
 
 def best_quote(
-    words: list[dict[str, Any]], clip_start: float, keywords: list[str], max_words: int = 8, after: float = 0.0
+    words: list[dict[str, Any]],
+    clip_start: float,
+    keywords: list[str],
+    max_words: int = 8,
+    after: float = 0.0,
+    lang: str = "fr",
 ) -> str:
     """La phrase la plus « citable » : courte, sûre (confiance ASR), vive (? ou !), avec un mot-clé si possible."""
     targets = {normalize(k) for k in keywords}
@@ -77,7 +73,7 @@ def best_quote(
     for s in split_sentences(words, clip_start):
         if s.start < after or not 2 <= s.words <= max_words:
             continue
-        if s.mean_conf < QUOTE_MIN_CONF or s.min_conf < WORD_MIN_CONF or not is_clean(s.text):
+        if s.mean_conf < QUOTE_MIN_CONF or s.min_conf < WORD_MIN_CONF or not is_clean(s.text, lang):
             continue
         score = s.mean_conf + (1.0 if s.text.endswith(("?", "!")) else 0.0)
         score += 0.5 if any(normalize(t) in targets for t in s.text.split()) else 0.0
@@ -86,33 +82,36 @@ def best_quote(
     return best.rstrip(".…")
 
 
-def make_hook(words: list[dict[str, Any]], clip_start: float, keywords: list[str]) -> str:
+def make_hook(words: list[dict[str, Any]], clip_start: float, keywords: list[str], lang: str = "fr") -> str:
     """Accroche affichée 3 s en haut : une citation dite APRÈS les 3 premières secondes (elle teaser la suite et ne
     double pas le sous-titre affiché au même moment)."""
-    return best_quote(words, clip_start, keywords, max_words=8, after=HOOK_SECONDS)
+    return best_quote(words, clip_start, keywords, max_words=8, after=HOOK_SECONDS, lang=lang)
 
 
-def make_title(creator: str, quote: str, reasons: list[str]) -> str:
-    """Titre ≤ 60 caractères, sans promesse trompeuse : une citation du clip, sinon un gabarit tiré des signaux."""
+def make_title(creator: str, quote: str, reasons: list[str], lang: str = "fr") -> str:
+    """Titre ≤ 60 caractères, sans promesse trompeuse : une citation du clip, sinon un gabarit tiré des signaux.
+    Les raisons (« rires », « voix forte », « chat ×N ») sont des libellés internes, en français quelle que soit la
+    langue du clip ; le titre, lui, suit la langue du clip."""
+    t = titles(lang)
     if quote:
-        for title in (f"{creator} : « {quote} »", f"« {quote} »"):
+        for title in (t["quote"].format(creator=creator, quote=quote), t["bare"].format(quote=quote)):
             if len(title) <= MAX_TITLE:
                 return title
-        return truncate(f"« {quote} »", MAX_TITLE)
+        return truncate(t["bare"].format(quote=quote), MAX_TITLE)
     joined = " ".join(reasons)
     if "rires" in joined:
-        return truncate(f"{creator} en fou rire en live 😂", MAX_TITLE)
+        return truncate(t["laugh"].format(creator=creator), MAX_TITLE)
     if "cris" in joined or "voix forte" in joined:
-        return truncate(f"{creator} s'énerve en live 😤", MAX_TITLE)
+        return truncate(t["angry"].format(creator=creator), MAX_TITLE)
     if "chat" in joined:
-        return truncate(f"Le chat de {creator} n'en revient pas 😳", MAX_TITLE)
-    return truncate(f"{creator} en live", MAX_TITLE)
+        return truncate(t["chat"].format(creator=creator), MAX_TITLE)
+    return truncate(t["live"].format(creator=creator), MAX_TITLE)
 
 
 def truncate(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
-    cut = text[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:«")
+    cut = text[: limit - 1].rsplit(" ", 1)[0].rstrip(' ,;:«"')
     return cut + "…"
 
 
@@ -123,7 +122,7 @@ def tag_from(name: str) -> str:
 def make_hashtags(brief: Brief) -> list[str]:
     """Hashtags exigés par le brief d'abord, puis le créateur et des génériques : 5 à 8 au total, sans doublon."""
     tags: list[str] = []
-    for tag in [*brief.required.hashtags, tag_from(brief.creator), *GENERIC_HASHTAGS]:
+    for tag in [*brief.required.hashtags, tag_from(brief.creator), *hashtags(brief.language)]:
         if tag.lower() not in {t.lower() for t in tags} and len(tag) > 1:
             tags.append(tag)
         if len(tags) >= MAX_HASHTAGS:

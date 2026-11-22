@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from qclip.meta import PROFANITY
+from qclip.lang import profanity
 
 FIRST_SECONDS = 7.0  # YouTube : ce qui se passe dans les 7 premières secondes compte pour la monétisation
 # Libellés CLAP → FR. Seulement explosion / coups de feu (SPEC §4.9) : « car crash » dépasse 0,5 sur 5 % d'un stream
@@ -23,13 +23,14 @@ RULE = "YouTube limite les pubs si un clip montre de la violence ou dit des gros
 
 
 def events(
-    words: list[dict[str, Any]], clap: np.ndarray | None, times: np.ndarray | None, labels: list[str]
+    words: list[dict[str, Any]], clap: np.ndarray | None, times: np.ndarray | None, labels: list[str], lang: str = "fr"
 ) -> list[dict[str, Any]]:
-    """Évènements à risque dans la plage (temps VOD) : gros mots et sons violents."""
+    """Évènements à risque dans la plage (temps VOD) : gros mots (langue du clip) et sons violents."""
+    bad = profanity(lang)
     found = [
         {"kind": "gros mot", "start": w["start"], "end": w["end"], "detail": w["text"].strip(".,!?…:;«»\"' ")}
         for w in words
-        if PROFANITY.search(w["text"])
+        if bad.search(w["text"])
     ]
     if clap is not None and times is not None and len(clap):
         for j, label in enumerate(labels):
@@ -68,7 +69,9 @@ def check(start: float, end: float, found: list[dict[str, Any]], min_len: float)
     }
 
 
-def window_events(windows_dir: Path, rank: int, words: list[dict[str, Any]], labels: list[str]) -> list[dict[str, Any]]:
+def window_events(
+    windows_dir: Path, rank: int, words: list[dict[str, Any]], labels: list[str], lang: str = "fr"
+) -> list[dict[str, Any]]:
     """Évènements d'une plage à partir de sa transcription (corrigée) et de son cache CLAP (w_<n>.clap.npy)."""
     from qclip.signals import grid
 
@@ -80,4 +83,4 @@ def window_events(windows_dir: Path, rank: int, words: list[dict[str, Any]], lab
         times = grid(fetched[rank]["start"], fetched[rank]["duration"])
         if len(times) != len(clap):
             clap = times = None  # cache d'une autre grille : on s'en passe plutôt que de se tromper d'instant
-    return events(words, clap, times, labels)
+    return events(words, clap, times, labels, lang)

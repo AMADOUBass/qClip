@@ -104,13 +104,17 @@ class Config(StrictModel):
     chat_emotes: list[str]
     chat_bots: list[str]  # logins ignorés dans le chat (minuscules)
     audio_event_labels: list[str]
-    keywords: list[str]
+    keywords: dict[str, list[str]]  # par langue du clip (« fr », « en ») : mots de réaction qui comptent dans le score
     features: FeaturesConfig
     llm: LlmConfig
     render: RenderConfig
     subtitle: SubtitleConfig
     # Interface hébergée ailleurs (ex. Vercel) qui parle à l'API de ce PC : adresses exactes autorisées, en https.
     web_origins: list[Annotated[str, Field(pattern=r"^https://[A-Za-z0-9.-]+(:\d+)?$")]] = Field(default_factory=list)
+
+    def keywords_for(self, lang: str) -> list[str]:
+        """Mots-clés de la langue du clip (aucun si la langue n'est pas prévue dans config.yaml)."""
+        return self.keywords.get(lang, [])
 
 
 def read_yaml(path: Path) -> dict[str, Any]:

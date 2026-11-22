@@ -565,3 +565,10 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
   donc la page ne marche que PC allumé et `qclip serve` lancé. L'API n'accepte que `localhost:3000` et les adresses
   https listées dans `config.yaml` → `web_origins` ; elle répond à la vérification « réseau local » de Chrome
   (`allow_private_network`), Chrome demande une autorisation à la première visite. `next build` validé en local.
+- **Clips en anglais, 2026-11-22** (campagnes payées seulement sur les vues « tier 1 » : US, Canada, UK…) : tout ce qui
+  dépend de la langue du clip (`brief.language`) est dans `qclip/lang.py` : gros mots (listes séparées : « bite »
+  est un mot courant en anglais), hashtags génériques (`#foryou`, `#gaming`…), titres par gabarit
+  (`xQc: "…"`, « can't stop laughing on stream »…), langue demandée au LLM (accroches proposées, rerank).
+  `config.yaml` → `keywords` par langue ; emotes anglaises ajoutées (lol, omg, bruh, lmfao). Transcription
+  (Parakeet multilingue) vérifiée sur une voix anglaise synthétisée par Windows : 22 mots sur 23, confiance 0,97.
+  L'interface reste en français. Sous-titres, sons CLAP, détection inchangés.

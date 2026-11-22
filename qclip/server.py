@@ -267,10 +267,11 @@ def create_app(queue: JobQueue | None = None, origins: list[str] | None = None) 
         if m is None:
             raise FileNotFoundError(f"moment {window} introuvable")
         slug = campaign_of(vid)
-        creator, model = load_campaign(slug).creator, load_config().llm.text_model
+        brief, model = load_campaign(slug), load_config().llm.text_model
+        creator, lang = brief.creator, brief.language
         text, duration, reasons = m["text"], m["duration"], m["reasons"]
         job = jobs.submit("rerank", f"Accroches proposées ({model})", slug, video_id=vid,
-                          fn=lambda steps: suggest(creator, text, duration, reasons, model, steps))  # fmt: skip
+                          fn=lambda steps: suggest(creator, text, duration, reasons, model, steps, lang))  # fmt: skip
         return {"job": job.to_dict()}
 
     @app.post("/api/vods/{vid}/render", status_code=202)

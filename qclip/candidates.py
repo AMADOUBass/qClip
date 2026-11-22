@@ -27,7 +27,7 @@ EVENT_NAMES = {
 SCORE_SMOOTH = int(3 / STEP)  # lissage du score combiné sur 3 s
 
 
-def window_signals(w: dict[str, Any], windows_dir: Path, config: Config, force: bool) -> dict[str, np.ndarray]:
+def window_signals(w: dict[str, Any], windows_dir: Path, keywords: list[str], force: bool) -> dict[str, np.ndarray]:
     """Signaux bon marché d'une plage (volume, parole), en cache dans w_<n>.signals.npz.
 
     Les coupes de scène ne sont plus cherchées ici (toute la plage) mais autour des bornes choisies (M7)."""
@@ -39,7 +39,7 @@ def window_signals(w: dict[str, Any], windows_dir: Path, config: Config, force: 
     vocals, _ = stem_paths(windows_dir, w["rank"])
     words = json.loads(transcript_path(windows_dir, w["rank"]).read_text(encoding="utf-8"))["words"]
     signals = {"times": times, "loudness": voice_loudness(vocals, w["start"], times)}
-    signals |= speech_features(words, times, config.keywords)
+    signals |= speech_features(words, times, keywords)
     np.savez_compressed(
         cache,
         times=signals["times"],
@@ -129,7 +129,7 @@ def build_candidates(
         if not transcript_path(windows_dir, w["rank"]).exists():
             raise FileNotFoundError(f"transcription de la plage {w['rank']} absente : lancer `qclip transcribe`")
         with steps.step(f"signaux plage {w['rank']:02d}"):
-            per_window.append(window_signals(w, windows_dir, config, force))
+            per_window.append(window_signals(w, windows_dir, config.keywords_for(brief.language), force))
     events = clap_signals(windows, windows_dir, config, steps, force) if use_clap else {}
 
     with steps.step("score + choix des passages"):

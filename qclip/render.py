@@ -320,7 +320,8 @@ def render_candidates(
         inside = [w for w in words if c["start"] <= w["start"] and w["end"] <= c["end"]]
         llm = rerank.get(rerank_key(c), {})
         clip_hook = hook if hook is not None else (
-            edit.get("hook") or llm.get("hook") or make_hook(inside, c["start"], config.keywords))  # fmt: skip
+            edit.get("hook") or llm.get("hook")
+            or make_hook(inside, c["start"], config.keywords_for(brief.language), brief.language))  # fmt: skip
         with steps.step(f"clip {c['id']} ({c['duration']:.0f} s, {layout.name}, {encoder})"):
             info = render_clip(c, work, out_path, layout, words, config.subtitle, config.render.lufs, encoder,
                                clip_hook, mention, brief.test_only, overlay, edit.get("style"))  # fmt: skip
@@ -345,12 +346,14 @@ def clip_safety(
     clip: Path | None = None,
     thumbnail: Path | None = None,
     vision_model: str | None = None,
+    lang: str = "fr",
 ) -> dict:
-    """Verdict démonétisation : gros mots et sons violents dans les 7 premières secondes, + images si vision activée."""
+    """Verdict démonétisation : gros mots (langue du clip) et sons violents dans les 7 premières secondes,
+    + images si vision activée."""
     from qclip.safety import check, window_events
     from qclip.sources import WORK_DIR
 
-    found = window_events(WORK_DIR / vid / "windows", c["window"], words, labels)
+    found = window_events(WORK_DIR / vid / "windows", c["window"], words, labels, lang)
     verdict = check(c["start"], c["end"], found, min_len)
     if clip is not None and vision_model:
         from qclip.vision import check_images
@@ -384,8 +387,9 @@ def write_meta(
     from qclip.utils.ffmpeg import media_duration
 
     config, brief = load_config(), load_campaign(slug)
-    title = llm.get("title") or make_title(brief.creator, best_quote(words, c["start"], config.keywords, 10),
-                                           c["reasons"])  # fmt: skip
+    lang = brief.language
+    quote = best_quote(words, c["start"], config.keywords_for(lang), 10, lang=lang)
+    title = llm.get("title") or make_title(brief.creator, quote, c["reasons"], lang)
     hashtags = make_hashtags(brief)
     caption = make_caption(title, brief, hashtags)
     duration = media_duration(clip)
@@ -428,6 +432,7 @@ def write_meta(
             clip=clip if config.llm.use_vision else None,
             thumbnail=thumb if config.llm.use_vision else None,
             vision_model=config.llm.vision_model if config.llm.use_vision else None,
+            lang=lang,
         ),
     }
     clip.with_suffix(".safety.json").write_text(json.dumps(post["safety"], ensure_ascii=False, indent=2), "utf-8")
