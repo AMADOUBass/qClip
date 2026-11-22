@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal EnableDelayedExpansion
 title qClip
 rem Lance qClip sans terminal : double-clic sur ce fichier.
-rem API (http://127.0.0.1:8765) et interface (http://localhost:3000) dans deux fenêtres réduites,
+rem API (http://127.0.0.1:8766) et interface (http://localhost:3000) dans deux fenêtres réduites,
 rem puis ouverture du navigateur. Pour tout arrêter : fermer les fenêtres « qClip API » et « qClip interface ».
 
 cd /d "%~dp0"
@@ -26,7 +26,7 @@ if not exist "web\node_modules" (
   popd
 )
 
-netstat -ano | findstr /r /c:"127.0.0.1:8765 .*LISTENING" >nul
+netstat -ano | findstr /r /c:"127.0.0.1:8766 .*LISTENING" >nul
 if errorlevel 1 (
   echo [qClip] Démarrage de l'API…
   start "qClip API" /min cmd /k "uv run qclip serve"

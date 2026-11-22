@@ -1,6 +1,6 @@
-// Client de l'API locale qClip (`qclip serve`, http://127.0.0.1:8765). Aucune logique métier ici.
+// Client de l'API locale qClip (`qclip serve`, http://127.0.0.1:8766). Aucune logique métier ici.
 
-export const API = process.env.NEXT_PUBLIC_QCLIP_API ?? "http://127.0.0.1:8765";
+export const API = process.env.NEXT_PUBLIC_QCLIP_API ?? "http://127.0.0.1:8766";
 
 /** URL d'un fichier servi par l'API (vidéos, miniatures, overlay) à partir d'un chemin « work/… ». */
 export const media = (path: string) => `${API}/media/${path.split("/").map(encodeURIComponent).join("/")}`;

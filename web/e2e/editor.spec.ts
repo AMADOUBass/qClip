@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 // Éditeur (maquette 5) sans rien enregistrer : transcription, aperçu, réglages, ligne de temps.
 
-const API = process.env.NEXT_PUBLIC_QCLIP_API ?? "http://127.0.0.1:8765";
+const API = process.env.NEXT_PUBLIC_QCLIP_API ?? "http://127.0.0.1:8766";
 
 test("éditeur : aperçu et ligne de temps", async ({ page, request }) => {
   const vods = (await (await request.get(`${API}/api/vods`)).json()) as { video_id: string }[];

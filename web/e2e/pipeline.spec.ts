@@ -3,7 +3,7 @@ import { type Page, type Route, expect, test } from "@playwright/test";
 // Pipeline (maquette 6) avec une API simulée : rien n'est écrit dans posts.csv. On vérifie ce que l'interface
 // envoie (POST …/log) et l'avancement du clip : rendu → posté → payé.
 
-const API = process.env.NEXT_PUBLIC_QCLIP_API ?? "http://127.0.0.1:8765";
+const API = process.env.NEXT_PUBLIC_QCLIP_API ?? "http://127.0.0.1:8766";
 const checks = ["overlay", "durée", "mention", "hashtags", "titre ≤ 60"].map((name) => ({ name, ok: true, detail: "ok" }));
 
 function clip(status: string, posts: Record<string, { url: string; views: number; paid: number }> = {}) {

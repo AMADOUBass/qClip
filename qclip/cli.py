@@ -537,9 +537,9 @@ def process(
 
 @app.command()
 def serve(
-    port: Annotated[int, typer.Option(help="Port local de l'API")] = 8765,
+    port: Annotated[int, typer.Option(help="Port local de l'API")] = 8766,
 ) -> None:
-    """Lance l'API locale de l'interface (http://127.0.0.1:8765, jamais exposée sur le réseau)."""
+    """Lance l'API locale de l'interface (http://127.0.0.1:8766, jamais exposée sur le réseau)."""
     from qclip.server import serve as run_server
 
     console.print(f"API qClip sur http://127.0.0.1:{port}  (docs : /docs) — Ctrl+C pour arrêter")

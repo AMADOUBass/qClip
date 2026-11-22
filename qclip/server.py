@@ -295,7 +295,7 @@ def create_app(queue: JobQueue | None = None) -> FastAPI:
     return app
 
 
-def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
+def serve(host: str = "127.0.0.1", port: int = 8766) -> None:
     import uvicorn
 
     if host not in {"127.0.0.1", "localhost", "::1"}:

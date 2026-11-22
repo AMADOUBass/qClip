@@ -364,7 +364,7 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
   - Gros mots (`meta.PROFANITY`) : jamais dans une accroche ni un titre, ni par gabarit ni par LLM (aussi à la lecture
     des anciens `rerank.json`). Les sous-titres restent fidèles à la parole.
   - `qclip process <campagne>` : chaîne complète (scout → fetch → ingest → transcribe → candidates), étapes annoncées.
-  - `qclip serve` (FastAPI, **127.0.0.1:8765 uniquement**) : routes de lecture (`overview.py`, aucune logique dans
+  - `qclip serve` (FastAPI, **127.0.0.1:8766 uniquement**) : routes de lecture (`overview.py`, aucune logique dans
     l'API), écriture (brief, overlay, ajout de VOD = ajout aux sources du brief + analyse, réglages, corrections,
     rendu, log), médias sous `/media/` limités à `work/`, `output/`, `campaigns/assets/` (Range : 206), file de tâches
     (`jobs.py`, **une à la fois**, étape / « N/total » / temps restant / journal), état en direct sur `/api/events` (SSE).
@@ -379,7 +379,7 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     (montants), rose `#d61f4f` (rejet), orange `#e8860c` (alertes), arrondis 28 px. Clair uniquement.
     **Polices (approximation, pas de notes de style fournies)** : Unbounded (titres larges), Inter (texte),
     JetBrains Mono (étiquettes en capitales). À remplacer si les polices exactes de Claude Design sont connues.
-  - Données : client `web/lib/api.ts` (API `NEXT_PUBLIC_QCLIP_API`, défaut http://127.0.0.1:8765), état des tâches
+  - Données : client `web/lib/api.ts` (API `NEXT_PUBLIC_QCLIP_API`, défaut http://127.0.0.1:8766), état des tâches
     en direct par **EventSource** sur `/api/events` → cache TanStack `["jobs"]` ; une tâche terminée fait recharger
     les écrans. Pastille de tâche dans l'en-tête (étape, « N/total », temps restant).
   - Palette **Ctrl K** (maquette 8) + raccourcis globaux : Ctrl N nouvelle VOD, T trier, Ctrl R rendre les gardés,
@@ -550,3 +550,5 @@ Publication automatique, multi-utilisateur, hébergement en ligne, SaaS. Plus ta
     la file de tâches) : 3 accroches + un titre, consigne stricte (rien d'inventé, aucun propos négatif prêté),
     filtre de gros mots ; **rien n'est appliqué sans un clic**. ≈ 1 min 30 chargement compris (mesuré : 91 s).
     `llm.text_model` = 4B.
+- **Port de l'API : 8766** (au lieu de 8765), 2026-11-22 — un autre programme de la machine (`firetv_link.py`) occupe
+  8765 et empêchait `qclip serve` de démarrer. API, client web (`NEXT_PUBLIC_QCLIP_API`), tests e2e, lanceur.

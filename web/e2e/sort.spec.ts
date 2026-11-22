@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 // Tri (maquette 4) sans rien décider : affichage, navigation J / K, libellés des raisons.
 
-const API = process.env.NEXT_PUBLIC_QCLIP_API ?? "http://127.0.0.1:8765";
+const API = process.env.NEXT_PUBLIC_QCLIP_API ?? "http://127.0.0.1:8766";
 
 test("tri : affichage et navigation au clavier", async ({ page, request }) => {
   const vods = (await (await request.get(`${API}/api/vods`)).json()) as { video_id: string }[];
